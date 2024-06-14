@@ -1,0 +1,773 @@
+---
+title: "Cod Inversions"
+author: "KE Lotterhos"
+date: "2024-03-18"
+output: html_document
+---
+
+setwd("/Users/lotterhos/Library/CloudStorage/GoogleDrive-k.lotterhos@gmail.com/.shortcut-targets-by-id/1DPJy8RgFslz3_PSZLLl7Z21mCvQUvnJZ/Manuscripts/Cod Ecotypes GoM /data")
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#install.packages("bigstatsr")
+#install.packages("bigsnpr")
+#install.packages("devtools")
+
+#install.packages("vcfR")
+#if (!require("BiocManager", quietly = TRUE))
+#    install.packages("BiocManager")
+
+#BiocManager::install("qvalue", force=TRUE)
+#devtools::install_github("whitlock/OutFLANK", force=TRUE)
+
+#install.packages("pheatmap")
+#install.packages("heatmap3")
+
+```
+#install_github("jokergoo/ComplexHeatmap") Didn't install
+
+# Load packages and data
+```{r load}
+library(devtools)
+library(bigstatsr)
+library(bigsnpr)
+library(ggplot2)
+library(OutFLANK)
+library(vegan)
+library(pheatmap)
+library(viridisLite)
+library(heatmap3)
+NCORES <- nb_cores()
+
+ggtheme <- theme_bw() + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), panel.border=element_blank(), axis.line = element_line(colour="grey30"), axis.title = element_text(colour="grey20"), axis.text = (element_text(colour="grey30")), legend.title = element_text(colour="grey20"), legend.text = element_text(colour="grey30"))
+
+```
+
+
+# Read in files
+```{r read in files}
+
+breakpoints <- read.csv("outputs/1-breakpoints.csv") # breakpoints output from script 1
+
+head(breakpoints)
+
+samp_full <- readRDS("outputs/1-Samples.rds") # load sample info output from script 1
+#load it as an RDS to keep the population order in analysis
+str(samp_full)
+
+pops <- read.table("outputs/1-Pops.txt", header=TRUE)
+head(pops)
+str(pops)
+
+LGtext <- breakpoints$LG 
+LGtext
+```
+
+# Loop through inversions
+
+The following code loops through each inversion and does the same analysis.
+However, note there are some `if()` statements and `seeds` that were manually customized for nuances associated with each inversion, and that "hone-in" on specific regions of interest.
+
+```{r analyze LG}
+
+for (i in 1:4){
+
+G_LGX <- readRDS(paste0("outputs/1-G_",LGtext[i],".rds"))
+
+pos <- colnames(G_LGX)
+samp <- rownames(G_LGX)
+
+
+## Step 1: Subset data to the inversion on Chromosome X and perform PCA. ####
+
+  Gx_snp <- add_code256(big_copy(G_LGX ,type="raw"),code=bigsnpr:::CODE_012) 
+  str(Gx_snp)
+  set.seed(123461356+i)
+  svd <- big_randomSVD(Gx_snp, 
+                        snp_scaleBinom(), 
+                        ncores = NCORES,
+                        k=2)
+  
+  
+  samp_full[,paste0(LGtext[i],"_PC1")] <- svd$u[,1]
+  samp_full[,paste0(LGtext[i],"_PC2")] <- svd$u[,2]
+  
+  str(samp_full)
+  
+
+ g<-  ggplot(samp_full[order(samp_full$Region,samp_full$Ecotype, decreasing=TRUE),]) + geom_point(aes(x=jitter(get(paste0(LGtext[i],"_PC1")),
+                          amount=0.001),
+                  y=jitter(get(paste0(LGtext[i],"_PC2")),
+                          amount=0.001),
+                 colour=PopID,
+                 pch=Ecotype,
+                 size=Ecotype)) +
+    scale_colour_manual(values=pops$pop.colors) + 
+    xlab(paste0(LGtext[i],"_PC1")) +
+    ylab(paste0(LGtext[i],"_PC2")) + ggtheme
+ggsave(filename=paste0("figures/", LGtext[i],"_PCA.pdf"), g, width=7, height=7)
+
+# Step 2: Identify clusters in the PCA ####
+
+  # Note: kmeans sometimes does not find the correct # clusters, or it switches the order. Make sure to set a seed and check the results!
+  if(i == 1){set.seed(9823487); n=5} # 5 clusters
+  if(i == 2){set.seed(6345219); n=6}
+  if(i == 3){set.seed(2234677); n=6} # LG7 seed 2234677
+  if(i == 4){set.seed(4923586); n=6}
+  clust <- kmeans(svd$u, n, nstart=20)
+  
+  samp_full[,paste0(LGtext[i],"cluster")] <- as.character(unlist(clust$cluster))
+  
+  head(samp_full)
+  
+
+g <-   ggplot(samp_full) + 
+    geom_point(aes(x=get(paste0(LGtext[i],"_PC1")), y=get(paste0(LGtext[i],"_PC2")), 
+                   col = get(paste0(LGtext[i],"cluster")))) + 
+    scale_colour_discrete() + ggtheme
+ggsave(paste0("figures/", LGtext[i],"_PCA_clusterIDs.pdf"), g, width=7, height=7)
+
+# Step 3: Name inversion clusters ####
+
+dim(G_LGX)
+rownames(G_LGX) <- paste(samp_full[,paste0(LGtext[i],"cluster")], 
+             rownames(G_LGX), 
+                         sep="_"
+                    )
+
+# just use a subset of 1000 SNPs to view heatmap
+# order individuals by their cluster
+# put SNPS in order after sampling with `sort`
+G_heat <- G_LGX[order(samp_full[,paste0(LGtext[i],
+                                        "cluster")]),
+              sort(sample( 1:ncol(G_LGX),1000))]
+
+pdf(paste0("figures/",LGtext[i],"_heatmap_1000KrandomSNPs_orderedByPCAcluster.pdf"), width=7, height=7)
+par(oma=c(0,0,0,5))
+heatmap(G_heat,
+        scale="none",
+        Rowv = NA,
+        Colv = NA,
+        cexRow = 0.3,
+        cexCol=0.1)
+dev.off()
+
+# Step 4: How pops map to clusters ####
+print(c("Mapping of samples to PCA cluster for", LGtext[i]))
+
+print(table(samp_full[,paste0(LGtext[i],"cluster")], 
+      samp_full$PopID))
+
+  
+
+
+## Step 4: Manually map clusters to karyotype
+#   0 indicates the reference allele and 1 indicates the alternative allele
+  
+# create a new variable from "cluster", which we will rename
+# the levels for below
+samp_full[,paste0(LGtext[i], "cluster_name")] <- factor(samp_full[,paste0(LGtext[i], "cluster")])
+
+if (i == 1){
+  ### LG1 cluster descriptions
+  # Cluster 1 is homozygous Alternate arrangement Iceland - "ALT-Iceland"
+  # Cluster 2 is heterokaryotype Iceland - "HET-Iceland"
+  # Cluster 3 is homozygous reference Iceland - "REF-Iceland"
+  # Cluster 4 is heterozygous GOM - "HET-GoM"
+  # Cluster 5 is homozygous reference GoM - "REF-GoM"
+   levels(samp_full[,paste0(LGtext[i], "cluster_name")]) <- c(
+    "ALT-Iceland", 
+    "HET-Iceland", 
+    "REF-Iceland",
+    "HET-GoM",
+    "REF-GoM"
+  )
+}
+if (i == 2){
+  ### LG2 cluster descriptions ####
+  # Cluster 1 is homozygous for Alternate arrangement from GoM - "Gom-ALT"
+  # Cluster 2 is heterokaryotypes from Iceland - "Iceland-HET"
+   # Cluster 3 is homozygous for the reference arrangement from GoM - "GoM-REF"
+   # Cluster 4 is homozygous for the reference arrangement from Iceland - "Iceland-REF"
+   # Cluster 5 is homozygous for the alternate arrangement from Iceland - "Iceland-ALT" - only nearshore
+   # Cluster 6 is heterokaryotypes from GoM - "GoM-HET"
+  
+    levels(samp_full[,paste0(LGtext[i], "cluster_name")]) <- c(
+    "ALT-GoM", 
+    "HET-Iceland", 
+    "REF-GoM",
+    "REF-Iceland",
+    "ALT-Iceland",
+    "HET-GoM"
+  )
+}
+
+if (i == 3){
+  ### LG7 Cluster descriptions ####
+  #  * Cluster 1 is heterokaryotypes from Iceland - "Iceland-HET"
+  #  * Cluster 2 is homozygous for the alternate arrangement from GoM - "GoM-ALT"
+  #  * Cluster 3 is heterokaryotypes from GoM - "GoM-HET"
+  #  * Cluster 4 is homozygous for the alternate arrangement from Iceland - "Iceland-ALT"
+  #  * Cluster 5 is homozygous for the reference arrangement from GoM - "GoM-REF"
+  #  * Cluster 6 is homozygous for the reference arrangement from Iceland - "Iceland-REF" (18 samples)
+  
+  levels(samp_full[,paste0(LGtext[i], "cluster_name")]) <- c(
+    "HET-Iceland", 
+    "ALT-GoM", 
+    "HET-GoM", 
+    "ALT-Iceland",
+    "REF-GoM", 
+    "REF-Iceland"
+  )
+}
+
+if (i == 4){
+  ### LG12 Cluster descriptions ####
+  #  * Cluster 1 is heterokaryotypes from Iceland - "HET-Iceland"
+  #  * Cluster 2 is heterokaryotypes from Maine - "HET-GoM"
+  #  * Cluster 3 is homozygous for the reference arrangement from Iceland "REF-Iceland"
+  #  * Cluster 4 is homozygous for the alternate arrangement from Maine - "ALT-GoM"
+  #  * Cluster 5 is homozygous for the reference arrangement from GoM - "REF-GoM"
+  #  * Cluster 6 is homozygous for the alternate arrangement from Iceland - "ALT-ICELAND"
+
+  levels(samp_full[,paste0(LGtext[i], "cluster_name")]) <- c(
+    "HET-Iceland", 
+    "HET-GoM", 
+    "REF-Iceland",
+    "ALT-GoM", 
+    "REF-GoM",
+    "ALT-Iceland"
+  )
+}
+
+### sanity checks for cluster mapping#### 
+
+print(c("Mapping of samples to named PCA cluster for", LGtext[i]))
+
+print(table(samp_full[,paste0(LGtext[i],"cluster_name")], 
+      samp_full$PopID))
+
+print(table(samp_full[,paste0(LGtext[i],"cluster")], samp_full[,paste0(LGtext[i],"cluster_name")]))
+
+
+
+# Update rownames for the Genotype matrix
+rownames(G_LGX) <- paste(samp_full[,paste0(LGtext[i],"cluster_name")], rownames(G_LGX), sep="_")
+
+G_heat <- G_LGX[order(samp_full[,paste0(LGtext[i],
+                                        "cluster")]),
+              sort(sample( 1:ncol(G_LGX),1000))]
+
+# One more sanity check with new row labels
+pdf(paste0("figures/",LGtext[i],"_heatmap_1000KrandomSNPs_orderedByPCAcluster_named.pdf"), width=7, height=7)
+par(oma=c(0,0,0,5))
+heatmap(G_heat,
+        scale="none",
+        Rowv = NA,
+        Colv = NA,
+        cexRow = 0.3,
+        cexCol=0.1)
+dev.off()
+
+# Final PCA with clusters ID'd ####
+g<-  ggplot(samp_full[order(samp_full$Region,samp_full$Ecotype, decreasing=TRUE),]) + geom_point(aes(x=jitter(get(paste0(LGtext[i],"_PC1")),
+                          amount=0.001),
+                  y=jitter(get(paste0(LGtext[i],"_PC2")),
+                          amount=0.001),
+                 colour=PopID,
+                 pch=get(paste0(LGtext[i],"cluster_name")),
+                 size=Ecotype)) +
+    scale_colour_manual(values=pops$pop.colors) + 
+    xlab(paste0(LGtext[i],"_PC1")) +
+    ylab(paste0(LGtext[i],"_PC2")) + ggtheme
+
+ggsave(filename=paste0("figures/", LGtext[i],"_PCA_final.pdf"), g, width=7, height=7)
+
+# Step 5: Identify FST outliers and create heatmaps ####
+
+# For a specific arrangement (reference homokarotypes only or alternate homokaryotypes only), how is it diverging between GOM and Iceland?
+# Identify outliers between GOM and Iceland within the same arrangement 
+
+  ### Outliers between Reference arrangements ####
+    dim(G_LGX)
+    index_REF <- grep("REF",samp_full[,paste0(LGtext[i], "cluster_name")])
+    
+    print(c("Outlier sample sizes for reference arrangement in", LGtext[i]))
+    t = table(samp_full[index_REF,paste0(LGtext[i], "cluster_name")], 
+          samp_full$PopID[index_REF])
+    print(t)
+    print(rowSums(t))
+    
+    my_fst_REF <- MakeDiploidFSTMat(G_LGX[index_REF,], 
+                    locusNames = colnames(G_LGX),
+                    popNames = samp_full[index_REF,paste0(LGtext[i], "cluster_name")])
+    head(my_fst_REF)
+    
+    muts <- data.frame(chrom_pos = colnames(G_LGX))
+
+    
+    muts[,paste0(LGtext[i],"FST_betweenREFkaryotypes")] <- my_fst_REF$FST
+    muts[,paste0(LGtext[i],"FST_betweenREFkaryotypes_outlier")] <- my_fst_REF$FST > 0.6
+    
+    head(my_fst_REF)
+    
+    head(muts)
+    muts$pos <- as.numeric(unlist(lapply(muts$chrom_pos, function(x){strsplit(x, split="__")[[1]][2]})))
+
+    # SNP summary - distance between SNPs
+    snp_dist <- muts$pos[2:(length(muts$pos))]-muts$pos[1:(length(muts$pos)-1)]
+    summary(snp_dist)
+    gaps <- which(snp_dist>quantile(snp_dist, prob=0.999))
+
+### Outliers between Alternate arrangements ####
+
+  
+      # get indexes of ALT homokaryotypes
+    index_ALT <- grep("ALT",samp_full[,paste0(LGtext[i], "cluster_name")])
+
+    print(c("Outlier sample sizes for alternate arrangement in", LGtext[i]))
+    t= table(samp_full[index_ALT,paste0(LGtext[i], "cluster_name")], 
+      samp_full$PopID[index_ALT])
+    print(t )
+    print(rowSums(t))
+# for LG7 note low sample size - 5 individuals in GoM
+
+      if (i == 1){
+      # we don't run this on the 1st LG because 
+      # the altnerate is not present in GoM
+      my_fst_ALT <- NA
+      muts[,paste0(LGtext[i],"FST_betweenALTkaryotypes")] <- NA
+      muts[,paste0(LGtext[i],"FST_betweenALTkaryotypes_outlier")] <-NA
+    }else{
+    my_fst_ALT <- MakeDiploidFSTMat(G_LGX[index_ALT,], 
+                locusNames = colnames(G_LGX),
+                popNames = samp_full[index_ALT,paste0(LGtext[i], "cluster_name")])
+    
+head(my_fst_ALT)
+
+    muts[,paste0(LGtext[i],"FST_betweenALTkaryotypes")] <- my_fst_ALT$FST
+    muts[,paste0(LGtext[i],"FST_betweenALTkaryotypes_outlier")] <- my_fst_ALT$FST > 0.6
+    }
+
+### Plot the FST values ####
+    pdf(paste0("figures/",LGtext[i],"_FST_betweenREFandALTkaryotypes.pdf"), width=20, height=6)
+    options(scipen = 999)
+    plot(muts$pos,muts[,paste0(LGtext[i],"FST_betweenREFkaryotypes")],pch=19, col=adjustcolor("blue", 0.25),
+         ylab="FST", ylim=c(0,1), main=paste(LGtext[i], "FST between REF karyotypes blue, ALT orange"), las=2, 
+         xaxp =c(min(muts$pos), max(muts$pos), n=100), bty="l")
+    points(muts$pos,muts[,paste0(LGtext[i],"FST_betweenALTkaryotypes")],pch=19, col=adjustcolor("orange", 0.25))
+    abline(h=0.6, col="grey", lwd=4)
+    #abline(v=muts$pos[gaps], col="cornflowerblue")
+     #abline(v=muts$pos[gaps+1], col="cornflowerblue")
+    abline(v=breakpoints$LGstartPos[i], col="cornflowerblue", lwd=4)
+    abline(v=breakpoints$LGendPos[i], col="cornflowerblue", lwd=4)
+    dev.off()
+    
+    
+### Number of FST outliers ####
+  print(LGtext[i])
+  print("Number of loci in REF outliers")
+  print(
+sum(muts[,paste0(LGtext[i],"FST_betweenREFkaryotypes_outlier")], na.rm=TRUE)
+)
+
+  print("Number of loci in ALT outliers")
+  print(sum(
+muts[,paste0(LGtext[i],"FST_betweenALTkaryotypes_outlier")], na.rm=TRUE)
+  )
+
+  print("Number of loci in both REF and ALT outliers")
+  print(
+  sum(muts[,paste0(LGtext[i],"FST_betweenALTkaryotypes_outlier")] &
+      muts[,paste0(LGtext[i],"FST_betweenREFkaryotypes_outlier")],
+      na.rm=TRUE
+      )
+  )
+  
+  print("Total number of loci in LG window")
+  print(nrow(muts))
+
+
+# Step 6: heatmaps for FST outliers ####
+  
+### Colors for heatmap ####
+  muts[,paste0(LGtext[i],"FST_betweenREFkaryotypes_outlier_color")] = "white" # non-outliers are white
+  
+  muts[which(muts[,paste0(LGtext[i],"FST_betweenREFkaryotypes_outlier")]
+            ), # get indexes of outliers
+        paste0(LGtext[i],"FST_betweenREFkaryotypes_outlier_color")
+       ] <- "darkblue" # REF outliers are darkblue
+  
+  muts[,paste0(LGtext[i],"FST_betweenALTkaryotypes_outlier_color")] = "white" # non-outliers are white
+  muts[which(muts[,paste0(LGtext[i],"FST_betweenALTkaryotypes_outlier")]
+             ), # get indexes of outliers
+        paste0(LGtext[i],"FST_betweenALTkaryotypes_outlier_color")] <- "darkred" # REF outliers are darkblue
+
+
+### subset of loci for heatmap - outliers and some random loci ####
+  
+  #### get the indexes (with reference to this LG) of the outliers ####
+  heat_outliers <- sort(unique(which(
+    muts[,paste0(LGtext[i],"FST_betweenALTkaryotypes_outlier")] |
+   muts[,paste0(LGtext[i],"FST_betweenREFkaryotypes_outlier")]
+          )))
+  
+  # Run a quick heatmap just to get a clustering order based on outlier clustering for the subsequent plots
+  hc <- hclust(dist(G_LGX[,heat_outliers]))
+    #do not run str() on this object
+  samp_full[,paste0(LGtext[i],"heatmapFSToutliersOrder")] <- (hc$order)
+  
+  # final ordering will be on Region, then cluster name, then the order based on outlier clustering
+  heatOrder <- order(samp_full$Region, 
+                     samp_full[,paste0(LGtext[i], "cluster_name")], 
+                     samp_full[,paste0(LGtext[i],"heatmapFSToutliersOrder")])
+
+
+### Heatmap function ####
+make_heatmap <- function(mut_sub, heatOrder, filename){
+  # mut_sub is the indexes of the mutations to use in the heatmap
+  # heatOrder is the index and order to plot the individuals in rows
+
+  G_LG_sub2 <- G_LGX[heatOrder,mut_sub]
+  
+  length(mut_sub)
+  
+  # create annotation table for heatmap columns (muts)
+  muts_ann <- cbind(
+    REF_outlier = muts[mut_sub,paste0(LGtext[i],"FST_betweenREFkaryotypes_outlier_color")],
+    ALT_outlier = muts[mut_sub,paste0(LGtext[i],"FST_betweenALTkaryotypes_outlier_color")]
+  )
+  head(muts_ann)
+  
+  # for annotation in heatmap, the rownames of annotation table has to have the same colnames as the matrix
+  rownames(muts_ann) <- colnames(G_LG_sub2)
+  
+  
+  # create annotation table for heatmap rows (samples)
+  samp_ann <- cbind(
+    Region = samp_full$Region_color[heatOrder],
+    Pop = samp_full$PopID_color[heatOrder],
+    Ecotype = samp_full$Ecotype_color[heatOrder]
+    )
+  
+  # for annotation in heatmap, the rownames of the annotation table has to have the same rownames as the matrix
+  rownames(samp_ann) <- rownames(G_LG_sub2)
+  head(samp_ann)
+  dim(samp_ann)
+  
+  heatmap_colors <- colorRampPalette(c("cornflowerblue", "grey", "firebrick3"))(3)
+  
+  
+  pdf(paste0("figures/",filename), width=9, height=9)
+  par(oma=c(0,0,0, 10))
+  heatmap3(G_LG_sub2,
+           Rowv=NA,
+           Colv = NA,
+           showColDendro = F,
+           showRowDendro = F,
+           scale = "none",
+           ColSideColors=muts_ann,
+           RowSideColors = samp_ann,
+           col = heatmap_colors,
+           cexCol = 0.1,
+           cexRow=0.3,
+           ColSideWidth = 2
+  )
+
+  dev.off()
+} # end function
+
+
+## Make full heatmap for LG7 with 4000 random loci, 100 loci at each end, and outliers
+  ## indexes are used here
+mut_sub <- sort(unique(c(1:100, 
+                         (ncol(G_LGX)-100):ncol(G_LGX),
+                         sample(1:ncol(G_LGX), 4000), 
+                         heat_outliers)))
+
+make_heatmap(mut_sub, heatOrder, paste0(LGtext[i], "_heatmap_outliers_plus4Ksnps.pdf"))
+
+## Make heatmap for outliers
+make_heatmap(heat_outliers, heatOrder, paste0(LGtext[i], "_heatmap_outliers.pdf"))
+
+if (i ==1){
+  # there are so many!
+  # large linkage block on right side
+  start_ind <- which(muts$pos==24230725)
+  end_ind <- which(muts$pos==  24455605)
+  mut_sub_a <- start_ind:end_ind
+    make_heatmap(mut_sub_a, heatOrder, paste0(LGtext[i], "_heatmap_subLG_a_allSNPs.pdf"))
+}
+if (i ==2){
+  ### LG2 zoom in to sub LGs ### 
+  # LG2_a on the left side of what looks like the breakpoint
+    start_ind <- which(muts$pos==2672)
+    end_ind <- which(muts$pos==344034)
+    mut_sub_a <- start_ind:end_ind
+    make_heatmap(mut_sub_a, heatOrder, paste0(LGtext[i], "_heatmap_subLG_a_allSNPs.pdf"))
+ 
+  # LG2_b on the right side of the inversion
+    start_ind <- which(muts$pos==4439467)
+    end_ind <- which(muts$pos==4444636)
+    mut_sub_b <- start_ind:end_ind
+    make_heatmap(mut_sub_b, heatOrder, paste0(LGtext[i], "_heatmap_subLG_b_allSNPs.pdf"))
+} # end if (i==2) statement
+
+if (i ==3){  ### LG7 zoom in to sub LGs ### 
+  ### LG7_a ####
+  # in the center of LG7 there is a small LG in ICE reference homokaryotypes
+    start_ind <- grep("21008004", muts$chrom_pos)
+    end_ind <- grep("21211273", muts$chrom_pos)
+    mut_sub_a <- start_ind:end_ind
+    make_heatmap(mut_sub_a, heatOrder, paste0(LGtext[i], "_heatmap_subLG_a_allSNPs.pdf"))
+
+  ### LG7_b ####
+  # On the right side of LG7 there apppears to be 
+  # a small LG right after the breakpoint "LG7sub_b"
+  # 26075924 -> before LG7 breakpoint
+  # 26662926 -> approx start LG7sub_b 
+  #  26787191 -> approx end LG7sub_b
+  # 26974475 -> ~100KB past breakpoint
+    start_ind <- grep("26662926", muts$chrom_pos)
+    end_ind <- grep("26787191", muts$chrom_pos)
+    mut_sub_b <- start_ind:end_ind
+    make_heatmap(mut_sub_b, heatOrder, paste0(LGtext[i], "_heatmap_subLG_b_allSNPs.pdf"))
+
+  }#end if i=3 statement
+
+ saveRDS(muts,paste0("outputs/2-",LGtext[i],"-muts.rds"))
+
+} # end loop through i
+```
+
+## Plot multi-inversion genotypes
+
+Make a heatmap that shows the inversions in each ecotype
+```{r plot multi-inversion genotypes}
+head(samp_full)
+
+samp_full <- samp_full[order(samp_full$Ecotype,
+                             samp_full$Region,
+                             samp_full$PopID),]
+
+samp_inv <- samp_full[,grep("cluster_name", colnames(samp_full))]
+head(samp_inv)
+rownames(samp_inv) <- samp_full$label
+samp_inv$label <- samp_full$label
+
+library(ggplot2); library(reshape2)
+samp_inv_melt <- melt(samp_inv, id.var = 'label')
+dim(samp_inv)
+dim(samp_inv_melt)
+294*4
+head(samp_inv_melt)
+
+pdf("figures/multi-inv-heatmap1.pdf", height=10,
+    width=8)
+ggplot(samp_inv_melt,  aes(variable, label)) + 
+  geom_tile(aes(fill = value)) +
+  scale_fill_manual(values=c("firebrick3", "red",  "grey40", "grey60", "cornflowerblue", "blue" )) +
+  theme(axis.text.y=element_text(size=2))
+dev.off()
+```
+
+
+```{r plot multi-inversion genotypes v2}
+
+samp_full <- samp_full[order(samp_full$Region,
+                        samp_full$Ecotype,
+                        samp_full$PopID,
+                        samp_full$label),]
+
+
+samp_inv <- samp_full[,grep("cluster_name", colnames(samp_full))]
+head(samp_inv)
+rownames(samp_inv) <- samp_full$label
+
+colnames(samp_inv) <- gsub("cluster_name","",colnames(samp_inv))
+str(samp_inv)
+
+samp_inv_num <- samp_inv
+# Let's order them:
+# REF-Iceland = 1
+# REF-GoM = 2
+# HET-Iceland = 4
+# HET-GOM = 5
+# ALT-Iceland = 7
+# ALT-GOM = 8
+
+levels(samp_inv_num$LG1)
+levels(samp_inv_num$LG1) <- c(7,4,1,5,2)
+
+levels(samp_inv_num$LG2)
+levels(samp_inv_num$LG2) <- c(8, 4, 2, 1, 7, 5)
+
+levels(samp_inv_num$LG7) 
+levels(samp_inv_num$LG7) <- c(4, 8, 5, 7, 2, 1)
+
+levels(samp_inv_num$LG12)
+levels(samp_inv_num$LG12) <- c(4, 5, 1, 8, 2, 7)
+
+head(samp_inv_num)
+
+samp_inv_num <- matrix(as.numeric(as.matrix(samp_inv_num)), ncol=4)
+
+rownames(samp_inv_num) <- samp_full$label
+colnames(samp_inv_num) <- colnames(samp_inv)
+str(samp_inv_num)
+
+ samp_ann <- cbind(
+    Region = samp_full$Region_color,
+    Pop = samp_full$PopID_color,
+    Ecotype = samp_full$Ecotype_color
+    )
+  
+  # for annotation in heatmap, the rownames of the annotation table has to have the same rownames as the matrix
+  rownames(samp_ann) <- rownames(samp_inv_num)
+  head(samp_ann)
+  dim(samp_ann)
+  
+  heatmap_colors <- colorRampPalette(c("cornflowerblue", "grey", "firebrick3"))(8)
+  
+  
+  pdf("figures/multi-inv-plot-v2.pdf", width=9, height=9)
+  par(oma=c(0,0,0, 10))
+  heatmap3(samp_inv_num,
+           Rowv=NA,
+           Colv = NA,
+           showColDendro = F,
+           showRowDendro = T,
+           scale = "none",
+           RowSideColors = samp_ann,
+           col = heatmap_colors,
+           cexCol = 1,
+           cexRow=0.4,
+           ColSideWidth = 2
+  )
+
+  dev.off()
+```
+
+## Step 4: RDA between genotypes and phenotypes
+
+Determine how this inversion influences traits
+
+Questions for sara
+- standardized for fish length?
+  - 
+- missing data?
+- FYI, correlations
+
+```{r}
+traits <- read.csv("allSample_morphometrics-uncorrected.csv")
+head(traits)
+table(traits$Location,traits$Ecotype)
+
+# align "trait" data with samples in genotype matrix ####
+traits$ID <- NA
+traits$ID <- paste0(substr(traits$SampleID,1,2), substr(traits$SampleID,4,6))
+head(traits$ID)
+tail(traits$ID)
+dim(traits)
+
+head(samp_full)
+str(samp_full)
+
+
+# merge the traits into the sample dataframe 
+samp_full2 <- merge(samp_full, traits, 
+                    by.x = "samp_full", 
+                    by.y = "ID", all.x=TRUE)
+
+samp_full2 <- samp_full2[order(samp_full2$X),]
+# check the dimensions
+if (dim(samp_full)[1] != dim(samp_full2)[1]) break()
+if(!identical(samp_full$samp_full, samp_full2$samp_full)) break()
+
+# Examine samples with genotypes but missing traits
+missing <- is.na(samp_full2$D1)
+sum(missing)
+samp_full2$label[which(missing)]
+
+# Examine correlations in trait data ####
+traitcols <- which(colnames(samp_full2) %in% paste0("D", 1:22))
+colnames(samp_full2)[traitcols]
+
+samprows <- which(!missing)
+
+# correlated traits
+cortraits <- cor(samp_full2[samprows, traitcols])
+heatmap(cortraits, scale="none")
+
+# use clustering to choose representative traits
+cutree(hclust(dist(cortraits, diag=TRUE)), k=6)
+
+subtraits = c("D1", "D2", "D3", "D4", "D5", "D16")
+subTraitCols <- which(colnames(samp_full2) %in% subtraits)
+
+cor(samp_full2[samprows, subTraitCols])
+
+#complete data for RDA
+rda_traits <- scale(samp_full2[samprows, subTraitCols])
+summary(rda_traits)
+
+head(rda_traits)
+
+
+
+for (i in 1:4){
+#i=1
+G_LGX <- readRDS(paste0("outputs/1-G_",LGtext[i],".rds"))
+
+pos <- colnames(G_LGX)
+samp <- rownames(G_LGX)
+
+# check the sample dataframe is identical
+if (!identical(samp_full2$label, samp)) break()
+
+dim(G_LGX)
+all_gen <- G_LGX[samprows,]
+  
+rda_lgx <- rda(all_gen~rda_traits)
+
+scores <- scores(rda_lgx)
+str(scores)
+
+samp_full2[samprows,paste0(LGtext[i],"RDA1")] <- scores$sites[,1]
+samp_full2[samprows,paste0(LGtext[i],"RDA2")] <- scores$sites[,2]
+ 
+max=max(c(scores$sites[,1], scores$sites[,2]))
+min=min(c(scores$sites[,1], scores$sites[,2]))
+#plot(rda_lgx, xlim=c(min,max), ylim=c(min,max))
+
+bp <- data.frame(scores$biplot*max)
+rownames(bp) <- c("D1", "D2", "D3", 
+                  "D4", "D5", "D16")
+bp$names <- rownames(bp)
+head(bp)
+
+
+g <- ggplot() + ggtheme + 
+  geom_point(data=samp_full2, 
+             aes(x=get(paste0(LGtext[i],"RDA1")),
+                y=get(paste0(LGtext[i],"RDA2")),
+            pch=get(paste0(LGtext[i],"cluster_name")),
+            color=get(paste0(LGtext[i],"cluster_name"))
+    )) +  
+  geom_segment(data=bp, 
+               aes(x=0, y=0, 
+                   xend=RDA1, 
+                   yend=RDA2),color="grey") + 
+  geom_text(data=bp, 
+            aes(x=RDA1, y=RDA2, 
+                label=names), hjust=0) + 
+  xlab("RDA1")+ ylab("RDA2") + 
+  theme(legend.title = element_blank()) + 
+  ggtitle(LGtext[i])
+g
+ggsave(filename=paste0("figures/",LGtext[i],"_RDA.pdf"), g, width = 5, height=4)
+       
+} # end loop
+
+head(samp_full2)
+```

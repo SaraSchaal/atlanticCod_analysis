@@ -1,0 +1,174 @@
+---
+title: "cichlid"
+author: "Katie Lotterhos"
+date: "10/11/2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Cichid data
+
+```{r load}
+if (!("devtools" %in% installed.packages())){install.packages(devtools)}
+library(devtools)
+if (!("bigstatsr" %in% installed.packages())){install.packages("bigstatsr")}
+library(bigstatsr)
+if (!("bigsnpr" %in% installed.packages())){devtools::install_github("privefl/bigsnpr")}
+if (!("qvalue" %in% installed.packages())){source("https://bioconductor.org/biocLite.R")
+; biocLite("qvalue")}
+if (!("vcfR" %in% installed.packages())){install.packages("vcfR")} 
+devtools::install_github("whitlock/OutFLANK", ref="development", force=TRUE)
+
+if (!("LEA" %in% installed.packages())){
+# install.packages("LEA") doesn’t work for new versions of R
+## try http:// if https:// URLs are not supported
+source("https://bioconductor.org/biocLite.R")
+biocLite("LEA")
+}
+
+library(LEA)
+
+library(OutFLANK)  # outflank package
+library(vcfR)
+library(bigsnpr)   # package for LD pruning
+library(bigstatsr) # package for LD pruning 
+```
+
+
+## Explore the VCF file
+
+```{r vcf}
+my_vcf <- read.vcfR("cichlid_data.vcf.gz")
+head(my_vcf)
+head(my_vcf@fix)
+head(my_vcf@gt)
+```
+
+## Get genotype data into OutFLANK format
+```{r convert}
+geno <- extract.gt(my_vcf) # Character matrix containing the genotypes
+position <- getPOS(my_vcf) # Positions in bp
+chromosome <- getCHROM(my_vcf) # Chromosome information
+
+G <- matrix(NA, nrow = nrow(geno), ncol = ncol(geno))
+
+G[geno %in% c("0/0", "0|0")] <- 0
+G[geno  %in% c("0/1", "1/0", "1|0", "0|1")] <- 1
+G[geno %in% c("1/1", "1|1")] <- 2
+
+head(G[,1:10])
+
+
+```
+
+## Upload population information
+```{r}
+ind <- read.csv("cichlid_sample_metadata.csv")
+str(ind)
+pop <- ind$place
+table(ind$fishing_pressure)
+```
+
+## Claculation FST for each locus
+```{r}
+my_fst <- MakeDiploidFSTMat(t(G), locusNames = paste0(chromosome,"_", position), popNames = pop)
+head(my_fst)
+plot(my_fst$FST, col=as.numeric(as.factor(chromosome)))
+```
+
+## Prune SNPs for LD
+```{r}
+G2<-add_code256(big_copy(t(G),type="raw"),code=bigsnpr:::CODE_012)
+newpc<-snp_autoSVD(G=G2,infos.chr = as.numeric(as.factor(chromosome)),infos.pos = position)
+which_pruned <- attr(newpc, which="subset") # Indexes of remaining SNPS after pruning
+length(which_pruned)
+
+```
+If issues with package:
+load("objs.RDS")
+
+## Calculate parameters on FST
+```{r}
+
+my_dist <- OutFLANK(my_fst[which_pruned,], NumberOfSamples = 3)
+str(my_dist)
+
+## Make sure the function fits your data:
+OutFLANKResultsPlotter(my_dist)
+OutFLANKResultsPlotter(my_dist, Zoom = TRUE)
+
+
+plot(my_dist$results$FST, col=as.numeric(as.factor(chromosome[which_pruned])))
+```
+
+## Calculate P-values
+```{r}
+P_all <- pChiSqNoCorr(my_fst, Fstbar = my_dist$FSTNoCorrbar, 
+                                   dfInferred = my_dist$dfInferred)
+plot(P_all$FSTNoCorr, P_all$Pval)
+
+plot(-log10(P_all$Pval), col=as.numeric(as.factor(chromosome)))
+```
+
+## Correct for multiple tests
+```{r}
+
+Alpha_new = 0.05/nrow(my_fst)
+-log10(Alpha_new)
+# add a line to the last plot above which we can consider “outliers”
+abline(h=-log10(Alpha_new))
+
+```
+
+### Population structure with PCA
+```{r}
+plot(newpc)
+str(newpc)
+plot(newpc$u[,1], newpc$u[,2], col=ind$fishing_pressure)
+legend(0, 0.2, legend = c("1", "2", "4"), fill = c(1,2,4))
+
+```
+
+### Plot ancestry
+```{r}
+
+
+dim(G)
+write.geno(t(G[which_pruned,]), "genotypes.geno")
+  # important to use putatively independent loci
+
+project = snmf("genotypes.geno",
+                K = 3, # normally we would run many values of K
+                entropy = TRUE, 
+                repetitions = 1, #normally we would do 10 at least
+                project = "new")
+
+Q.matrix <- as.matrix(Q(project, K = 3))
+
+row.names(Q.matrix) <- paste0(ind$fishing_pressure,"_", ind$id)
+head(Q.matrix)
+
+
+my.colors <- c("tomato", "lightblue", "olivedrab")
+par(mar=c(8, 4, 2, 1))
+barplot(t(Q.matrix), 
+        border = NA, 
+        space = 0, 
+        col = my.colors, 
+        xlab = "",
+        ylab = "Ancestry proportions", 
+        main = "Ancestry matrix", las=2)
+
+```
+
+
+
+
+
+
+
+
+
