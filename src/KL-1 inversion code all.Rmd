@@ -2,10 +2,11 @@
 title: "Cod Inversions"
 author: "KE Lotterhos"
 date: "2024-03-18"
-output: html_document
+output:
+  pdf_document: default
+  html_document: default
 ---
 
-setwd("/Users/lotterhos/Library/CloudStorage/GoogleDrive-k.lotterhos@gmail.com/.shortcut-targets-by-id/1DPJy8RgFslz3_PSZLLl7Z21mCvQUvnJZ/Manuscripts/Cod Ecotypes GoM /data")
 
 ```{r setup, include=FALSE, eval=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -35,10 +36,15 @@ library(ggplot2)
 library(OutFLANK)
 library(vegan)
 library(pheatmap)
+sessionInfo()
 
-bigSNP <- snp_attach(paste0("",  "acod_merged.MAF05_QC.rds"))
+datadir <- "/Users/lotterhos/Library/CloudStorage/GoogleDrive-k.lotterhos@gmail.com/.shortcut-targets-by-id/1DPJy8RgFslz3_PSZLLl7Z21mCvQUvnJZ/Manuscripts/Cod Ecotypes GoM /data/"
 
-#  drop the individual at the 17th position because it is a duplicate. It was a fish that was right in the middle of being red or olive and it accidentally got left in both groups and got sequenced twice. 
+bigSNP <- snp_attach(paste0(datadir,  "acod_merged.MAF05_QC.rds"))
+
+#  drop the individual at the 17th position because it is a duplicate. 
+#It was a fish that was right in the middle of being red or olive and 
+#it accidentally got left in both groups and got sequenced twice. 
 
 G_full <- bigSNP$genotypes[-17,]
 pos_full <- bigSNP$map$physical.pos
@@ -101,7 +107,18 @@ pop2.colors <- c(adjustcolor("darkgreen",1), #mass winter
                 adjustcolor("cornflowerblue",1) #Iceland NE Near
                 )
 
-write.table(data.frame(pop.names,pop.IDs, pop.colors, region, ecotype, pop.IDs2, pop2.colors), "outputs/1-Pops.txt", row.names=FALSE)
+write.table(data.frame(pop.names,pop.IDs, pop.colors, region, ecotype, pop.IDs2, pop2.colors), "../outputs/1-Pops.txt", row.names=FALSE)
+write("This file contains population-level information
+      pop.names: Numbered population ID corresponding to some files
+      pop.IDs: Specific Geographic Location
+      pop.colors: Color corresponding to pop.IDs
+      region: Iceland or GoM
+      ecotype: Nearshore or Offshore
+      pop.IDs2: An ID based on ecotype and geographic region
+      pop2.colors: Color corresponding to pop.IDs2
+      ",
+      "../outputs/1-Pops.txt.metadata.md")
+
 
 ```
 
@@ -184,29 +201,20 @@ svd7 <- big_randomSVD(Gsub_snp,
                       ncores = NCORES,
                       k=2)
 
-plot(svd7, type = "scores") +
-  aes(color = pop_full) +
-  labs(color = "Population")
-
-pdf("figures/1-Gsub-PCA.pdf", width=5, height=5)
-  plot(svd7, type = "scores") +
-  aes(color = pop_full) +
-  labs(color = "Population")
-dev.off()
 
 # Add PC loadings to sample info
-#samp_full$Gsub_PC1 <-  svd7$u[,1]
-#samp_full$Gsub_PC2 <-  svd7$u[,2]
+samp_full$Gsub_PC1 <-  svd7$u[,1]
+samp_full$Gsub_PC2 <-  svd7$u[,2]
 
 # Add PC loadings to muts
 muts$Gsub_PC1 <- muts$Gsub_PC2 <-NA
 muts$Gsub_PC1[index] <- svd7$v[,1]
 muts$Gsub_PC2[index] <- svd7$v[,2]
 
-plot(abs(muts$Gsub_PC1), pch=19, col=adjustcolor("blue",0.01))
+#plot(abs(muts$Gsub_PC1), pch=19, col=adjustcolor("blue",0.01))
 ```
 
-## View PC Loadings
+## Perform PCAs on individual linkage groups to identify inversion breakpoints
 
 # Chrom 1
 ```{r, fig.width=8}
@@ -462,7 +470,7 @@ samp_full$G_AllInv_PC1 <- svd7$u[,1]
 samp_full$G_AllInv_PC2 <- svd7$u[,2]
 
 str(samp_full)
-pdf("figures/PCA-samples-inversion-SNPs-only.pdf", width=6, height=6)
+pdf("../figures/PCA-samples-inversion-SNPs-only.pdf", width=6, height=6)
 ggplot(samp_full) + geom_point(aes(x=G_AllInv_PC1,
                                    y=G_AllInv_PC2,
                                     colour = PopID,
@@ -485,7 +493,7 @@ cut_avg <- cutree(hc, k = 5)
 str(cut_avg)
 str(dhc)
 # https://www.datacamp.com/tutorial/hierarchical-clustering-R
-pdf("figures/Hclust-inversionSNPsonly.pdf", width=15, height=10)
+pdf("../figures/Hclust-inversionSNPsonly.pdf", width=15, height=10)
 plot(hc, cex=0.3)
 rect.hclust(hc , k = 5, border=2:6)
 dev.off()
@@ -496,7 +504,7 @@ samp_full$InvHclustK5 <- as.numeric(cut_avg)
 # this looks like SW near in Iceland is more closely related to GOM then NE NEar in Iceland
 table(samp_full$PopID, samp_full$InvHclustK5)
 
-pdf("figures/Hclust-inversionSNPsonly-heatmap.pdf", width=15, height=15)
+pdf("../figures/Hclust-inversionSNPsonly-heatmap.pdf", width=15, height=15)
 par(oma=c(8,4,4,8))
 heatmap(as.matrix(dist), cexRow=0.2, cexCol=0.2, scale="none", ColSideColors=samp_full$PopID_color, RowSideColors=samp_full$PopID_color, )
 dev.off()
@@ -506,21 +514,44 @@ dev.off()
 ```{r}
 
 head(samp_full)
-write.csv(samp_full,"outputs/1-Samples.csv")
-saveRDS(samp_full,"outputs/1-Samples.rds")
+write.csv(samp_full,"../outputs/1-Samples.csv")
+saveRDS(samp_full,"../outputs/1-Samples.rds")
+write("This file describes information about each sample. It is saved as an RDS file for loading into R with the proper column objects (e.g. ordered factors) ",
+      "../outputs/1-Samples.metadata")
 ```
 
 #### Save individual inversion files 
 
 ```{r}
 breakpoints
-write.csv(breakpoints, "outputs/1-breakpoints.csv", row.names = FALSE)
+write.csv(breakpoints, "../outputs/1-breakpoints.csv", row.names = FALSE)
+write("This file describes the breakpoint of inversions identified by the 99% outlier PCA loadings for individual chromsome /n
+      LG: linkage group /n
+      LGstartIndex: Start index of the inversion in the full genotype matrix stored in `1-AllGSNPs.rds` /n
+      LGendIndex: end index of the inversion in the full genotype matrix stored in `1-AllGSNPs.rds` /n
+      chrom: chromosome /n
+      LGstartPos: start position of the inversion on the chromosoms /n
+      LGendPos: end start position of the inversion on the chromosoms /n
+      LGstartPos_minus1MB_index: Start index minus 1 MB of the inversion in the full genotype matrix stored in `1-AllGSNPs.rds` /n
+      LGendPos_plus1MB_index: end index plus 1MB of the inversion in the full genotype matrix stored in `1-AllGSNPs.rds` /n",
+      "../outputs/1-breakpoints.csv.metadata.md")
 
 head(G_full[,1:5]) # make sure rows and columns are labeled
 
-saveRDS(G_LG, "outputs/1-AllLGSNPs.rds")
-saveRDS(G_full[,LG1start_minus1MB:LG1end_plus1MB], "outputs/1-G_LG1.rds")
-saveRDS(G_full[,LG2start_minus1MB:LG2end_plus1MB], "outputs/1-G_LG2.rds")
-saveRDS(G_full[,LG7start_minus1MB:LG7end_plus1MB], "outputs/1-G_LG7.rds")
-saveRDS(G_full[,LG12start_minus1MB:LG12end_plus1MB], "outputs/1-G_LG12.rds")
+saveRDS(G_LG, "../outputs/1-AllLGSNPs.rds")
+dim(G_LG)
+write("This file is a genotype matrix for SNPs located in the four inversions
+      Each matrix has individuals in rows and SNPs in columns
+      Each cell has the number of copies of the reference allele",
+      "../outputs/1-AllLGSNPs.metadata.md")
+
+
+saveRDS(G_full[,LG1start_minus1MB:LG1end_plus1MB], "../outputs/1-G_LG1.rds")
+saveRDS(G_full[,LG2start_minus1MB:LG2end_plus1MB], "../outputs/1-G_LG2.rds")
+saveRDS(G_full[,LG7start_minus1MB:LG7end_plus1MB], "../outputs/1-G_LG7.rds")
+saveRDS(G_full[,LG12start_minus1MB:LG12end_plus1MB], "../outputs/1-G_LG12.rds")
+write("These files are genotype matrices for the inversions on each linkage group
+      Each matrix has individuals in rows and SNPs in columns
+      Each cell has the number of copies of the reference allele",
+      "../outputs/1-G_LGX.metadata.md")
 ```

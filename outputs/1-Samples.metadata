@@ -1,0 +1,1 @@
+This file describes information about each sample. It is saved as an RDS file for loading into R with the proper column objects (e.g. ordered factors) 

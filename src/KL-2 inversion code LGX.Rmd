@@ -2,10 +2,10 @@
 title: "Cod Inversions"
 author: "KE Lotterhos"
 date: "2024-03-18"
-output: html_document
+output:
+  pdf_document: default
+  html_document: default
 ---
-
-setwd("/Users/lotterhos/Library/CloudStorage/GoogleDrive-k.lotterhos@gmail.com/.shortcut-targets-by-id/1DPJy8RgFslz3_PSZLLl7Z21mCvQUvnJZ/Manuscripts/Cod Ecotypes GoM /data")
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -39,7 +39,11 @@ library(viridisLite)
 library(heatmap3)
 NCORES <- nb_cores()
 
+datadir <- "/Users/lotterhos/Library/CloudStorage/GoogleDrive-k.lotterhos@gmail.com/.shortcut-targets-by-id/1DPJy8RgFslz3_PSZLLl7Z21mCvQUvnJZ/Manuscripts/Cod Ecotypes GoM /data/"
+
 ggtheme <- theme_bw() + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), panel.border=element_blank(), axis.line = element_line(colour="grey30"), axis.title = element_text(colour="grey20"), axis.text = (element_text(colour="grey30")), legend.title = element_text(colour="grey20"), legend.text = element_text(colour="grey30"))
+
+sessionInfo()
 
 ```
 
@@ -47,15 +51,15 @@ ggtheme <- theme_bw() + theme(panel.grid.major = element_blank(), panel.grid.min
 # Read in files
 ```{r read in files}
 
-breakpoints <- read.csv("outputs/1-breakpoints.csv") # breakpoints output from script 1
+breakpoints <- read.csv("../outputs/1-breakpoints.csv") # breakpoints output from script 1
 
 head(breakpoints)
 
-samp_full <- readRDS("outputs/1-Samples.rds") # load sample info output from script 1
+samp_full <- readRDS("../outputs/1-Samples.rds") # load sample info output from script 1
 #load it as an RDS to keep the population order in analysis
 str(samp_full)
 
-pops <- read.table("outputs/1-Pops.txt", header=TRUE)
+pops <- read.table("../outputs/1-Pops.txt", header=TRUE)
 head(pops)
 str(pops)
 
@@ -72,7 +76,7 @@ However, note there are some `if()` statements and `seeds` that were manually cu
 
 for (i in 1:4){
 
-G_LGX <- readRDS(paste0("outputs/1-G_",LGtext[i],".rds"))
+G_LGX <- readRDS(paste0("../outputs/1-G_",LGtext[i],".rds"))
 
 pos <- colnames(G_LGX)
 samp <- rownames(G_LGX)
@@ -105,7 +109,7 @@ samp <- rownames(G_LGX)
     scale_colour_manual(values=pops$pop.colors) + 
     xlab(paste0(LGtext[i],"_PC1")) +
     ylab(paste0(LGtext[i],"_PC2")) + ggtheme
-ggsave(filename=paste0("figures/", LGtext[i],"_PCA.pdf"), g, width=7, height=7)
+ggsave(filename=paste0("../figures/", LGtext[i],"_PCA.pdf"), g, width=7, height=7)
 
 # Step 2: Identify clusters in the PCA ####
 
@@ -125,7 +129,7 @@ g <-   ggplot(samp_full) +
     geom_point(aes(x=get(paste0(LGtext[i],"_PC1")), y=get(paste0(LGtext[i],"_PC2")), 
                    col = get(paste0(LGtext[i],"cluster")))) + 
     scale_colour_discrete() + ggtheme
-ggsave(paste0("figures/", LGtext[i],"_PCA_clusterIDs.pdf"), g, width=7, height=7)
+ggsave(paste0("../figures/", LGtext[i],"_PCA_clusterIDs.pdf"), g, width=7, height=7)
 
 # Step 3: Name inversion clusters ####
 
@@ -142,7 +146,7 @@ G_heat <- G_LGX[order(samp_full[,paste0(LGtext[i],
                                         "cluster")]),
               sort(sample( 1:ncol(G_LGX),1000))]
 
-pdf(paste0("figures/",LGtext[i],"_heatmap_1000KrandomSNPs_orderedByPCAcluster.pdf"), width=7, height=7)
+pdf(paste0("../figures/",LGtext[i],"_heatmap_1000KrandomSNPs_orderedByPCAcluster.pdf"), width=7, height=7)
 par(oma=c(0,0,0,5))
 heatmap(G_heat,
         scale="none",
@@ -259,7 +263,7 @@ G_heat <- G_LGX[order(samp_full[,paste0(LGtext[i],
               sort(sample( 1:ncol(G_LGX),1000))]
 
 # One more sanity check with new row labels
-pdf(paste0("figures/",LGtext[i],"_heatmap_1000KrandomSNPs_orderedByPCAcluster_named.pdf"), width=7, height=7)
+pdf(paste0("../figures/",LGtext[i],"_heatmap_1000KrandomSNPs_orderedByPCAcluster_named.pdf"), width=7, height=7)
 par(oma=c(0,0,0,5))
 heatmap(G_heat,
         scale="none",
@@ -281,7 +285,7 @@ g<-  ggplot(samp_full[order(samp_full$Region,samp_full$Ecotype, decreasing=TRUE)
     xlab(paste0(LGtext[i],"_PC1")) +
     ylab(paste0(LGtext[i],"_PC2")) + ggtheme
 
-ggsave(filename=paste0("figures/", LGtext[i],"_PCA_final.pdf"), g, width=7, height=7)
+ggsave(filename=paste0("../figures/", LGtext[i],"_PCA_final.pdf"), g, width=7, height=7)
 
 # Step 5: Identify FST outliers and create heatmaps ####
 
@@ -350,7 +354,7 @@ head(my_fst_ALT)
     }
 
 ### Plot the FST values ####
-    pdf(paste0("figures/",LGtext[i],"_FST_betweenREFandALTkaryotypes.pdf"), width=20, height=6)
+    pdf(paste0("../figures/",LGtext[i],"_FST_betweenREFandALTkaryotypes.pdf"), width=20, height=6)
     options(scipen = 999)
     plot(muts$pos,muts[,paste0(LGtext[i],"FST_betweenREFkaryotypes")],pch=19, col=adjustcolor("blue", 0.25),
          ylab="FST", ylim=c(0,1), main=paste(LGtext[i], "FST between REF karyotypes blue, ALT orange"), las=2, 
@@ -458,7 +462,7 @@ make_heatmap <- function(mut_sub, heatOrder, filename){
   heatmap_colors <- colorRampPalette(c("cornflowerblue", "grey", "firebrick3"))(3)
   
   
-  pdf(paste0("figures/",filename), width=9, height=9)
+  pdf(paste0("../figures/",filename), width=9, height=9)
   par(oma=c(0,0,0, 10))
   heatmap3(G_LG_sub2,
            Rowv=NA,
@@ -535,9 +539,18 @@ if (i ==3){  ### LG7 zoom in to sub LGs ###
 
   }#end if i=3 statement
 
- saveRDS(muts,paste0("outputs/2-",LGtext[i],"-muts.rds"))
+ saveRDS(muts,paste0("../outputs/2-",LGtext[i],"-muts.rds"))
 
 } # end loop through i
+
+write("These files store FST values between Iceland and GoM individuals 
+      `chrom_pos:` chromosome and position
+      `LGXFST_betweenREFkaryotypes`: FST between Iceland and GoM individuals homozygous for the reference arrangement
+      `LGXFST_betweenREFkaryotypes_outlier:` Logical flag indicating if FST > 0.6
+      `pos` position on the chromosome
+      `LG12FST_betweenALTkaryotypes:` FST between Iceland and GoM individuals homozygous for the alternate arrangement
+      `LG12FST_betweenALTkaryotypes_outlier:` Logical flag indicating if FST > 0.6
+      ",      "../outputs/2-LGX-muts.rds.metadata.md")
 ```
 
 ## Plot multi-inversion genotypes
@@ -554,6 +567,7 @@ samp_inv <- samp_full[,grep("cluster_name", colnames(samp_full))]
 head(samp_inv)
 rownames(samp_inv) <- samp_full$label
 samp_inv$label <- samp_full$label
+head(samp_inv)
 
 library(ggplot2); library(reshape2)
 samp_inv_melt <- melt(samp_inv, id.var = 'label')
@@ -561,13 +575,18 @@ dim(samp_inv)
 dim(samp_inv_melt)
 294*4
 head(samp_inv_melt)
+samp_inv_melt$Ecotype <- NA
+samp_inv_melt$Ecotype[grep("Nearshore", samp_inv_melt$label)] <- "Nearshore"
+samp_inv_melt$Ecotype[grep("Offshore", samp_inv_melt$label)] <- "Offshore"
 
-pdf("figures/multi-inv-heatmap1.pdf", height=10,
+
+pdf("../figures/multi-inv-heatmap1.pdf", height=10,
     width=8)
 ggplot(samp_inv_melt,  aes(variable, label)) + 
   geom_tile(aes(fill = value)) +
   scale_fill_manual(values=c("firebrick3", "red",  "grey40", "grey60", "cornflowerblue", "blue" )) +
-  theme(axis.text.y=element_text(size=2))
+  theme(axis.text.y=element_text(size=2)) + 
+  scale_y_discrete(labels=samp_inv_melt$Ecotype)
 dev.off()
 ```
 
@@ -578,7 +597,6 @@ samp_full <- samp_full[order(samp_full$Region,
                         samp_full$Ecotype,
                         samp_full$PopID,
                         samp_full$label),]
-
 
 samp_inv <- samp_full[,grep("cluster_name", colnames(samp_full))]
 head(samp_inv)
@@ -630,7 +648,7 @@ str(samp_inv_num)
   heatmap_colors <- colorRampPalette(c("cornflowerblue", "grey", "firebrick3"))(8)
   
   
-  pdf("figures/multi-inv-plot-v2.pdf", width=9, height=9)
+  pdf("../figures/multi-inv-plot-v2.pdf", width=9, height=9)
   par(oma=c(0,0,0, 10))
   heatmap3(samp_inv_num,
            Rowv=NA,
@@ -648,126 +666,10 @@ str(samp_inv_num)
   dev.off()
 ```
 
-## Step 4: RDA between genotypes and phenotypes
-
-Determine how this inversion influences traits
-
-Questions for sara
-- standardized for fish length?
-  - 
-- missing data?
-- FYI, correlations
-
-```{r}
-traits <- read.csv("allSample_morphometrics-uncorrected.csv")
-head(traits)
-table(traits$Location,traits$Ecotype)
-
-# align "trait" data with samples in genotype matrix ####
-traits$ID <- NA
-traits$ID <- paste0(substr(traits$SampleID,1,2), substr(traits$SampleID,4,6))
-head(traits$ID)
-tail(traits$ID)
-dim(traits)
-
+# Write outputs
+```{r write outputs}
 head(samp_full)
-str(samp_full)
-
-
-# merge the traits into the sample dataframe 
-samp_full2 <- merge(samp_full, traits, 
-                    by.x = "samp_full", 
-                    by.y = "ID", all.x=TRUE)
-
-samp_full2 <- samp_full2[order(samp_full2$X),]
-# check the dimensions
-if (dim(samp_full)[1] != dim(samp_full2)[1]) break()
-if(!identical(samp_full$samp_full, samp_full2$samp_full)) break()
-
-# Examine samples with genotypes but missing traits
-missing <- is.na(samp_full2$D1)
-sum(missing)
-samp_full2$label[which(missing)]
-
-# Examine correlations in trait data ####
-traitcols <- which(colnames(samp_full2) %in% paste0("D", 1:22))
-colnames(samp_full2)[traitcols]
-
-samprows <- which(!missing)
-
-# correlated traits
-cortraits <- cor(samp_full2[samprows, traitcols])
-heatmap(cortraits, scale="none")
-
-# use clustering to choose representative traits
-cutree(hclust(dist(cortraits, diag=TRUE)), k=6)
-
-subtraits = c("D1", "D2", "D3", "D4", "D5", "D16")
-subTraitCols <- which(colnames(samp_full2) %in% subtraits)
-
-cor(samp_full2[samprows, subTraitCols])
-
-#complete data for RDA
-rda_traits <- scale(samp_full2[samprows, subTraitCols])
-summary(rda_traits)
-
-head(rda_traits)
-
-
-
-for (i in 1:4){
-#i=1
-G_LGX <- readRDS(paste0("outputs/1-G_",LGtext[i],".rds"))
-
-pos <- colnames(G_LGX)
-samp <- rownames(G_LGX)
-
-# check the sample dataframe is identical
-if (!identical(samp_full2$label, samp)) break()
-
-dim(G_LGX)
-all_gen <- G_LGX[samprows,]
-  
-rda_lgx <- rda(all_gen~rda_traits)
-
-scores <- scores(rda_lgx)
-str(scores)
-
-samp_full2[samprows,paste0(LGtext[i],"RDA1")] <- scores$sites[,1]
-samp_full2[samprows,paste0(LGtext[i],"RDA2")] <- scores$sites[,2]
- 
-max=max(c(scores$sites[,1], scores$sites[,2]))
-min=min(c(scores$sites[,1], scores$sites[,2]))
-#plot(rda_lgx, xlim=c(min,max), ylim=c(min,max))
-
-bp <- data.frame(scores$biplot*max)
-rownames(bp) <- c("D1", "D2", "D3", 
-                  "D4", "D5", "D16")
-bp$names <- rownames(bp)
-head(bp)
-
-
-g <- ggplot() + ggtheme + 
-  geom_point(data=samp_full2, 
-             aes(x=get(paste0(LGtext[i],"RDA1")),
-                y=get(paste0(LGtext[i],"RDA2")),
-            pch=get(paste0(LGtext[i],"cluster_name")),
-            color=get(paste0(LGtext[i],"cluster_name"))
-    )) +  
-  geom_segment(data=bp, 
-               aes(x=0, y=0, 
-                   xend=RDA1, 
-                   yend=RDA2),color="grey") + 
-  geom_text(data=bp, 
-            aes(x=RDA1, y=RDA2, 
-                label=names), hjust=0) + 
-  xlab("RDA1")+ ylab("RDA2") + 
-  theme(legend.title = element_blank()) + 
-  ggtitle(LGtext[i])
-g
-ggsave(filename=paste0("figures/",LGtext[i],"_RDA.pdf"), g, width = 5, height=4)
-       
-} # end loop
-
-head(samp_full2)
+saveRDS(samp_full,"../outputs/2-Samples.rds")
+write("This file expands the sample dataframe to include the arrangement of each individual and their PC scores for each inversion",
+     "../outputs/2-Samples.rds.metadata.md")
 ```

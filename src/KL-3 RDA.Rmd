@@ -1,0 +1,303 @@
+---
+title: "Untitled"
+author: "KE Lotterhos"
+date: "2024-03-25"
+output: html_document
+---
+
+## Step 4: RDA between genotypes and phenotypes
+
+Determine how this inversion influences traits
+
+Questions for sara
+- standardized for fish length?
+  - 
+- missing data?
+- FYI, correlations
+
+
+# Load packages and data
+```{r load}
+library(devtools)
+library(bigstatsr)
+library(bigsnpr)
+library(ggplot2)
+library(OutFLANK)
+library(vegan)
+library(pheatmap)
+library(viridisLite)
+library(heatmap3)
+library(car)
+library(multcompView)
+library(multcomp)
+library(tidyverse)
+library(corrplot)
+NCORES <- nb_cores()
+
+datadir <- "/Users/lotterhos/Library/CloudStorage/GoogleDrive-k.lotterhos@gmail.com/.shortcut-targets-by-id/1DPJy8RgFslz3_PSZLLl7Z21mCvQUvnJZ/Manuscripts/Cod Ecotypes GoM /data/"
+
+ggtheme <- theme_bw() + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_blank(), panel.border=element_blank(), axis.line = element_line(colour="grey30"), axis.title = element_text(colour="grey20"), axis.text = (element_text(colour="grey30")), legend.title = element_text(colour="grey20"), legend.text = element_text(colour="grey30"))
+
+sessionInfo()
+
+
+breakpoints <- read.csv("../outputs/1-breakpoints.csv") # breakpoints output from script 1
+
+head(breakpoints)
+LGtext <- breakpoints$LG 
+LGtext
+
+```
+
+```{r}
+uncor_traits <- read.csv(paste0(datadir,"allSample_morphometrics-uncorrected.csv"))
+cor_traits <- read.csv(paste0(datadir,"allSample_morphometrics-regressed.csv"))
+samp_full <- readRDS("../outputs/2-Samples.rds")
+
+head(uncor_traits)
+head(cor_traits)
+head(samp_full)
+
+table(uncor_traits$Location,uncor_traits$Ecotype)
+table(cor_traits$EcoLoc)
+
+# align "uncorrected trait" data with samples in genotype matrix ####
+uncor_traits$ID <- NA
+uncor_traits$ID <- paste0(substr(uncor_traits$SampleID,1,2), substr(uncor_traits$SampleID,4,6))
+head(uncor_traits$ID)
+tail(uncor_traits$ID)
+dim(uncor_traits)
+
+cor_traits$ID <- NA
+cor_traits$ID <- paste0(substr(cor_traits$SampleID,1,2), substr(cor_traits$SampleID,4,6))
+head(cor_traits$ID)
+tail(cor_traits$ID)
+dim(cor_traits)
+
+head(samp_full)
+str(samp_full)
+samp_full$order <- 1:nrow(samp_full)
+
+# merge the traits into the sample dataframe 
+samp_full2 <- merge(samp_full, uncor_traits, 
+                    by.x = "samp_full", 
+                    by.y = "ID", all.x=TRUE)
+
+samp_full3 <- merge(samp_full2, cor_traits, 
+                    by.x = "samp_full", 
+                    by.y = "ID", all.x=TRUE)
+
+
+samp_full4 <- samp_full3[order(samp_full3$order),]
+
+# check the dimensions
+if (dim(samp_full)[1] != dim(samp_full4)[1]) break()
+if(!identical(samp_full$samp_full, samp_full4$samp_full)) break()
+
+# Examine samples with genotypes but missing traits
+missing <- is.na(samp_full4$D1)
+sum(missing)
+samp_full4$label[which(missing)]
+```
+
+# Visualize total length data
+```{r length data}
+### Examine length data
+
+
+head(samp_full4)
+samp_full4$Ecotype <- samp_full4$Ecotype.x
+
+# Run ANOVA on population ID
+poplm <- lm(TotalLength~PopID, data=samp_full4)
+Anova(poplm )
+anova <- aov(TotalLength~PopID, data=samp_full4)
+t <- TukeyHSD(anova)
+cld <- multcompLetters4(anova, t)
+
+# Get Tukey letters for plot
+clddf <- data.frame(cld$PopID$Letters)
+clddf$PopID <- rownames(clddf)
+clddf
+
+# Get the order of the populations in the plot
+# and merge the letters dataframe (which is not in the right order)
+# with the ordered levels. Then make sure to reorder!
+orderedPop <- data.frame(PopID=as.character(levels(samp_full4$PopID)))
+orderedPop$order <- 1:nrow(orderedPop)
+orderedPop
+orderedPop <- merge(orderedPop, clddf, by="PopID")
+orderedPop <- orderedPop[orderedPop$order,]
+orderedPop
+
+pdf("../figures/totalLength.pdf", width=8, height=6)
+par(mar=c(8,4,1,1))
+b <- boxplot(TotalLength~PopID, data=samp_full4, las=2, ylim=c(30,120))
+text(1:9,y=120, orderedPop$cld.PopID.Letters)
+plot(t, las=2)
+
+is.ordered(samp_full4$PopID)
+boxplot(TotalLength~Ecotype*Region, data=samp_full4, las=2)
+
+is.ordered(samp_full4$LG1cluster_name)
+levels(samp_full4$LG1cluster_name)
+samp_full4$LG1cluster_name <- factor(samp_full4$LG1cluster_name, ordered=TRUE, levels = 
+                            c("REF-GoM", "HET-GoM","REF-Iceland",
+                              "HET-Iceland","ALT-Iceland"))
+levels(samp_full4$LG2cluster_name)
+samp_full4$LG2cluster_name <- factor(samp_full4$LG2cluster_name, ordered=TRUE, levels = 
+                            c("REF-GoM", "HET-GoM", "ALT-GoM" ,"REF-Iceland",
+                              "HET-Iceland","ALT-Iceland"))
+levels(samp_full4$LG7cluster_name)
+samp_full4$LG7cluster_name <- factor(samp_full4$LG7cluster_name, ordered=TRUE, levels = 
+                            c("REF-GoM", "HET-GoM", "ALT-GoM" ,"REF-Iceland",
+                              "HET-Iceland","ALT-Iceland"))
+levels(samp_full4$LG12cluster_name)
+samp_full4$LG12cluster_name <- factor(samp_full4$LG12cluster_name, ordered=TRUE, levels = 
+                            c("REF-GoM", "HET-GoM", "ALT-GoM" ,"REF-Iceland",
+                              "HET-Iceland","ALT-Iceland"))
+
+boxplot(TotalLength~LG1cluster_name, data=samp_full4, las=2)
+boxplot(TotalLength~LG2cluster_name, data=samp_full4, las=2)
+boxplot(TotalLength~LG7cluster_name, data=samp_full4, las=2)
+boxplot(TotalLength~LG12cluster_name, data=samp_full4, las=2)
+dev.off()
+
+
+
+samp_full4$LG1cluster_nameB <- substr(samp_full4$LG1cluster_name,0,3)
+head(samp_full4$LG1cluster_nameB)
+Anova(lm(TotalLength~LG1cluster_nameB*Region, data=samp_full4))
+
+samp_full4$LG2cluster_nameB <- substr(samp_full4$LG2cluster_name,0,3)
+Anova(lm(TotalLength~LG2cluster_nameB*Region, data=samp_full4))
+
+samp_full4$LG7cluster_nameB <- substr(samp_full4$LG7cluster_name,0,3)
+Anova(lm(TotalLength~LG7cluster_nameB*Region, data=samp_full4))
+
+samp_full4$LG12cluster_nameB <- substr(samp_full4$LG12cluster_name,0,3)
+Anova(lm(TotalLength~LG12cluster_nameB*Region, data=samp_full4))
+```
+
+
+
+# Examine correlations in trait data ####
+traitcols <- which(colnames(samp_full2) %in% paste0("D", 1:22))
+colnames(samp_full2)[traitcols]
+
+samprows <- which(!missing)
+
+# correlated traits
+cortraits <- cor(samp_full2[samprows, traitcols])
+heatmap(cortraits, scale="none")
+
+# use clustering to choose representative traits
+cutree(hclust(dist(cortraits, diag=TRUE)), k=6)
+
+subtraits = c("D1", "D2", "D3", "D4", "D5", "D16")
+subTraitCols <- which(colnames(samp_full2) %in% subtraits)
+
+cor(samp_full2[samprows, subTraitCols])
+
+#complete data for RDA
+rda_traits <- scale(samp_full2[samprows, subTraitCols])
+summary(rda_traits)
+
+head(rda_traits)
+
+
+```{r rdas}
+for (i in 1:4){
+  print(LGtext[i])
+#i=1
+G_LGX <- readRDS(paste0("../outputs/1-G_",LGtext[i],".rds"))
+
+pos <- colnames(G_LGX)
+samp <- rownames(G_LGX)
+
+samp_full4_gen <- data.frame(label=samp, order_G=1:length(samp))
+samp_full4_gen <- left_join(samp_full4_gen, samp_full4)
+head(samp_full4_gen)
+
+# check the sample dataframe issamp_full# check the sample dataframe is identical
+if (!identical(samp_full4_gen$label, samp)){print("Error"); break()} 
+
+samprows <- which(!is.na(samp_full4_gen$V3))
+length(samprows)
+
+traitcols <- which(colnames(samp_full4_gen) %in% paste0("V", 3:20))
+traitcols
+
+# check trait correlations
+cortraits <- cor(samp_full4_gen[samprows, traitcols])
+corrplot(cortraits)
+heatmap(cortraits, scale="none")
+# use clustering to choose representative traits
+cutree(hclust(dist(cortraits, diag=TRUE)), k=10)
+
+# Determine subset of representative traits
+subtraits = c("V3", "V4", "V6", "V7", "V8", "V12", "V13", "V15", "V17", "V18")
+subTraitCols <- which(colnames(samp_full4_gen) %in% subtraits)
+# check trait correlations
+cortraits2 <- cor(samp_full4_gen[samprows, subTraitCols])
+cortraits2 # all correlations are less than 0.75
+corrplot(cortraits2)
+heatmap(cortraits2, scale="none")
+
+#complete data for RDA
+rda_traits <- scale(samp_full4_gen[samprows, subTraitCols])
+summary(rda_traits)
+head(rda_traits)
+dim(rda_traits)
+
+dim(G_LGX)
+rda_gen <- G_LGX[samprows,]
+dim(rda_gen)  
+
+
+rda_lgx <- rda(rda_gen~rda_traits)
+
+scores <- scores(rda_lgx)
+str(scores)
+
+samp_full4[samprows,paste0(LGtext[i],"RDA1")] <- scores$sites[,1]
+samp_full4[samprows,paste0(LGtext[i],"RDA2")] <- scores$sites[,2]
+ 
+max=max(c(scores$sites[,1], scores$sites[,2]))
+min=min(c(scores$sites[,1], scores$sites[,2]))
+#plot(rda_lgx, xlim=c(min,max), ylim=c(min,max))
+
+# double check the names line up!
+bp <- data.frame(scores$biplot*max)
+bp$names <- subtraits
+bp
+rownames(bp) <- subtraits
+bp
+
+
+TO DO: Replot this with genotype in colors and region in symbols
+
+g <- ggplot() + ggtheme + 
+  geom_point(data=samp_full4, 
+             aes(x=get(paste0(LGtext[i],"RDA1")),
+                y=get(paste0(LGtext[i],"RDA2")),
+            pch=get(paste0(LGtext[i],"cluster_name")),
+            color=get(paste0(LGtext[i],"cluster_name"))
+    )) +  
+  geom_segment(data=bp, 
+               aes(x=0, y=0, 
+                   xend=RDA1, 
+                   yend=RDA2),color="grey") + 
+  geom_text(data=bp, 
+            aes(x=RDA1, y=RDA2, 
+                label=names), hjust=0) + 
+  xlab("RDA1")+ ylab("RDA2") + 
+  theme(legend.title = element_blank()) + 
+  ggtitle(LGtext[i])
+g
+ggsave(filename=paste0("../figures/",LGtext[i],"_RDA.pdf"), g, width = 5, height=4)
+       
+} # end loop
+
+head(samp_full2)
+```

@@ -1,0 +1,34 @@
+File_Or_Script_Or_Column,OutputFrom_Or_InTable,Description
+acod_merged.MAF05_QC.bk,NA,a bigsnpr R object needed to load  the genotype matrix. Individuals in rows and loci in columns. Counts represent the number of alternate alleles at the site
+acod_merged.MAF05_QC.rds,NA,a bigsnpr R object needed to load  the genotype matrix. Individuals in rows and loci in columns. Counts represent the number of alternate alleles at the site
+data.Rproj,NA,R project file for this directory
+KL-1 inversion code all.Rmd,NA,This script loads all the data and identifies the inversions from the PCA.
+KL-2 inversion code LGX.Rmd,NA,"Identify which inversion PCA cluster each individual belongs to (e.g. which arrangement it has), indentify outliers on LGX between Iceland and Maine within each arrangement. This is written as a loop but with seeds set to ensure the correct clustering is returned each time that it is run."
+,,
+,,
+,,
+"table with lat/long for each sample, it’s a priori population ID, and its associated morphology data",NEEDED,
+a more accurate table of breakpoints,NEEDED,
+a list of thinned SNPs,NEEDED,
+,KL-2 inversion code LGX.Rmd,"a table of samples with information added PCA scores, cluster IDs for each inversion cluster"
+,,a table of mutations with the index and positions for FST outliers
+,,
+,KL3 - heat map all outliers,
+,,
+,KL4 - trait effects of each arrangement,
+breakpoints.csv,KL-1 inversion code all.Rmd,output the windows that capture  the inversions and their breakpoints. Indices are given as column numbers in the genotype matrix
+LG,breakpoints.csv,
+LGstartindex,breakpoints.csv,
+LGendindex,breakpoints.csv,
+chrom,breakpoints.csv,
+LGstartPos,breakpoints.csv,
+LGendPos,breakpoints.csv,
+G_LG1.rds,KL-1 inversion code all.Rmd,Subset of the genotype data to the SNPs on this linkage block inversion. Coordinates correspond to breakpoints.csv.
+G_LG2.rds,KL-1 inversion code all.Rmd,Subset of the genotype data to the SNPs on this linkage block inversion. Coordinates correspond to breakpoints.csv.
+G_LG7.rds,KL-1 inversion code all.Rmd,Subset of the genotype data to the SNPs on this linkage block inversion. Coordinates correspond to breakpoints.csv.
+G_LG12.rds,KL-1 inversion code all.Rmd,Subset of the genotype data to the SNPs on this linkage block inversion. Coordinates correspond to breakpoints.csv.
+Samples-1.txt,KL-1 inversion code all.Rmd,Table with info on each sample
+Pop,Samples-1.txt,A number 1-9
+PopID,Samples-1.txt,The name of the location of sampling
+Region,Samples-1.txt,The region of the individual
+Ecotype,Samples-1.txt,The ecotype of the individual
