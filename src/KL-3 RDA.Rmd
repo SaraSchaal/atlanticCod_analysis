@@ -47,11 +47,13 @@ head(breakpoints)
 LGtext <- breakpoints$LG 
 LGtext
 
+breakpoints$LGendPos-breakpoints$LGstartPos
+breakpoints
 ```
 
 ```{r}
 uncor_traits <- read.csv(paste0(datadir,"allSample_morphometrics-uncorrected.csv"))
-cor_traits <- read.csv(paste0(datadir,"allSample_morphometrics-regressed.csv"))
+cor_traits <- read.csv(paste0(datadir,"allSample_morphometrics_regressed.csv"))
 samp_full <- readRDS("../outputs/2-Samples.rds")
 
 head(uncor_traits)
@@ -110,7 +112,7 @@ samp_full4$Ecotype <- samp_full4$Ecotype.x
 
 # Run ANOVA on population ID
 poplm <- lm(TotalLength~PopID, data=samp_full4)
-Anova(poplm )
+Anova(poplm)
 anova <- aov(TotalLength~PopID, data=samp_full4)
 t <- TukeyHSD(anova)
 cld <- multcompLetters4(anova, t)
@@ -167,101 +169,231 @@ dev.off()
 
 samp_full4$LG1cluster_nameB <- substr(samp_full4$LG1cluster_name,0,3)
 head(samp_full4$LG1cluster_nameB)
-Anova(lm(TotalLength~LG1cluster_nameB*Region, data=samp_full4))
+table(samp_full4$LG1cluster_nameB,samp_full4$Region)
+try(Anova(lm(TotalLength~LG1cluster_nameB*Region, data=samp_full4, 
+      contrasts=list(LG1cluster_nameB='contr.sum', Region='contr.sum')),
+      type='III'))
+# this model is missing datapoints in one factor combination, so it throws an error
 
 samp_full4$LG2cluster_nameB <- substr(samp_full4$LG2cluster_name,0,3)
-Anova(lm(TotalLength~LG2cluster_nameB*Region, data=samp_full4))
+table(samp_full4$LG2cluster_nameB,samp_full4$Region)
+Anova(lm(TotalLength~LG2cluster_nameB*Region, data=samp_full4, 
+      contrasts=list(LG2cluster_nameB='contr.sum', Region='contr.sum')),
+      type='III')
 
 samp_full4$LG7cluster_nameB <- substr(samp_full4$LG7cluster_name,0,3)
-Anova(lm(TotalLength~LG7cluster_nameB*Region, data=samp_full4))
+table(samp_full4$LG7cluster_nameB,samp_full4$Region)
+Anova(lm(TotalLength~LG7cluster_nameB*Region, data=samp_full4, 
+      contrasts=list(LG7cluster_nameB='contr.sum', Region='contr.sum')),
+      type='III')
 
 samp_full4$LG12cluster_nameB <- substr(samp_full4$LG12cluster_name,0,3)
-Anova(lm(TotalLength~LG12cluster_nameB*Region, data=samp_full4))
+table(samp_full4$LG12cluster_nameB,samp_full4$Region)
+Anova(lm(TotalLength~LG12cluster_nameB*Region, data=samp_full4, 
+      contrasts=list(LG12cluster_nameB='contr.sum', Region='contr.sum')),
+      type='III')
 ```
 
 
 
-# Examine correlations in trait data ####
-traitcols <- which(colnames(samp_full2) %in% paste0("D", 1:22))
-colnames(samp_full2)[traitcols]
-
-samprows <- which(!missing)
-
-# correlated traits
-cortraits <- cor(samp_full2[samprows, traitcols])
-heatmap(cortraits, scale="none")
-
-# use clustering to choose representative traits
-cutree(hclust(dist(cortraits, diag=TRUE)), k=6)
-
-subtraits = c("D1", "D2", "D3", "D4", "D5", "D16")
-subTraitCols <- which(colnames(samp_full2) %in% subtraits)
-
-cor(samp_full2[samprows, subTraitCols])
-
-#complete data for RDA
-rda_traits <- scale(samp_full2[samprows, subTraitCols])
-summary(rda_traits)
-
-head(rda_traits)
-
-
-```{r rdas}
-for (i in 1:4){
-  print(LGtext[i])
-#i=1
-G_LGX <- readRDS(paste0("../outputs/1-G_",LGtext[i],".rds"))
+```{r}
+# read in a genotype matrix to get the sequenced individuals
+G_LGX <- readRDS(paste0("../outputs/1-G_",LGtext[1],".rds"))
 
 pos <- colnames(G_LGX)
 samp <- rownames(G_LGX)
 
+# make sure clusters are lined up
+plot(samp_full4$LG1_PC1, samp_full4$LG1_PC2, col=samp_full4$LG1cluster_name)
+
+# Create a data frame to hold the sample data for the rDA
 samp_full4_gen <- data.frame(label=samp, order_G=1:length(samp))
 samp_full4_gen <- left_join(samp_full4_gen, samp_full4)
 head(samp_full4_gen)
+plot(samp_full4_gen$LG1_PC1, samp_full4_gen$LG1_PC2, col=samp_full4_gen$LG1cluster_name)
 
-# check the sample dataframe issamp_full# check the sample dataframe is identical
+# Get the corrected trait values
+traitcols <- which(colnames(samp_full4_gen) %in% paste0("cD", 1:22))
+traitcols
+colnames(samp_full4_gen)[traitcols]
+
+
+
+
+
+# check the sample dataframe samp_full# check the sample dataframe is identical
 if (!identical(samp_full4_gen$label, samp)){print("Error"); break()} 
 
-samprows <- which(!is.na(samp_full4_gen$V3))
+# get the rows that don't have NA for trait values
+samprows <- which(!is.na(samp_full4_gen$cD1))
 length(samprows)
 
-traitcols <- which(colnames(samp_full4_gen) %in% paste0("V", 3:20))
-traitcols
-
+samp_full5_gen <- samp_full4_gen[samprows,]
+  
 # check trait correlations
-cortraits <- cor(samp_full4_gen[samprows, traitcols])
+cortraits <- cor(samp_full5_gen[, traitcols])
 corrplot(cortraits)
 heatmap(cortraits, scale="none")
+
 # use clustering to choose representative traits
-cutree(hclust(dist(cortraits, diag=TRUE)), k=10)
+trait_groups <- cutree(hclust(dist(cortraits, diag=TRUE)), k=9)
+trait_groups
+write(trait_groups,"../outputs/traitgroups.txt")
 
 # Determine subset of representative traits
-subtraits = c("V3", "V4", "V6", "V7", "V8", "V12", "V13", "V15", "V17", "V18")
-subTraitCols <- which(colnames(samp_full4_gen) %in% subtraits)
+subtraits = c("cD1", "cD3", "cD4", "cD5", "cD10", "cD13", "cD16", "cD18", "cD19") # hard coding!
+
+subTraitCols <- which(colnames(samp_full5_gen) %in% subtraits)
 # check trait correlations
-cortraits2 <- cor(samp_full4_gen[samprows, subTraitCols])
+cortraits2 <- cor(samp_full5_gen[, subTraitCols])
 cortraits2 # all correlations are less than 0.75
+
+pdf("../figures/RDA_trait_corrs.pdf", width=7, height=7)
 corrplot(cortraits2)
 heatmap(cortraits2, scale="none")
+dev.off()
 
 #complete data for RDA
-rda_traits <- scale(samp_full4_gen[samprows, subTraitCols])
+rda_traits <- scale(samp_full5_gen[,subTraitCols])
 summary(rda_traits)
-head(rda_traits)
+
+rownames(rda_traits) <- samp_full5_gen$label
 dim(rda_traits)
+head(rda_traits)
+```
 
+```{r, rda_trait_pred function}
+rda_trait_pred <- function(rdaobj, env_row, K){
+  #rdaobj is RDA object
+  #env_row is the row of the environment in the biplot output
+  #K is the number of RDA axes
+  scores <- scores(rdaobj, choices=1:K)
+  ind.sc <- scores$sites
+  pred <- matrix(NA, nrow=nrow(ind.sc), ncol=K)
+  for (k in 1:K){
+    pred[,k] <- ind.sc[,k]*eigenvals(rdaobj)[k]*summary(rdaobj)$biplot[env_row,k]
+  }
+  trait_pred <- scale(rowSums(pred))
+ return(trait_pred) 
+}
+
+```
+
+```{r rdas}
+
+
+samp_inv_morph_full <-  NULL
+
+for (i in 1:4){
+  samp_inv_morph <- data.frame(label = rownames(rda_traits),
+                             Inv = LGtext[i],
+                             traitname = NA,
+                             trait_pred = NA)
+  print(LGtext[i])
+#i=1
+G_LGX <- readRDS(paste0("../outputs/1-G_",LGtext[i],".rds"))
+muts <- readRDS(paste0("../outputs/2-",LGtext[i],"-muts.rds"))
+dim(muts)
+
+# make sure dimensions line up
+if(!(dim(G_LGX[samprows,])[1]==dim(samp_full5_gen)[1])){
+  print("Error dim don't line up")
+  break
+  }# make sure labels line up
+if(!identical(rownames(G_LGX[samprows,]),samp_full5_gen$label)){
+  print("Error sample names don't line up")
+  break
+  }# make sure labels line up
+
+pos <- colnames(G_LGX)
+
+G_LGX2 <- add_code256(big_copy(G_LGX[samprows,] ,type="raw"),code=bigsnpr:::CODE_012)
+
+### Snp thinning
+# Use this function to perform clumping and pruning on snps in large windows. We'll use this subset of "less" linked snps for the rDA
+# To skip this step comment out these lines
+# we give the infos.chr the same ID because we do one inversion at a time
+pca_inv <- snp_autoSVD(G_LGX2,infos.chr=rep(1, length=length(muts$pos)), infos.pos = muts$pos,
+                   size= 50000000,
+                    thr.r2=0.1
+                   )
+# size is the window size around the snp. 
+# For LG1, A size of 100,000 and r2 threshold 0.2 reduces the 74,000 snps on LG1 to 17,000. A size of 50MB and threshold 0.1 reduces to 8,000.
+# I explored the effects of thinning and the pattern in the results were not super sensitive to these parameters. With fewer SNPs, the percent of variation explained by the first two RDA axis decreased. In addition, for LG2 and LG7, there was more spread around individuals in RDA space. But for LG1 and LG12, strong clustering remained in RDA space.
+#str(pca_inv)
+#dim(G_LGX2)
+thinned_snps <- attr(pca_inv, which="subset")
+print("number of snps")
+dim(G_LGX2)[2]
+print("number of thinned snps")
+length(thinned_snps)
+pca_inv$cluster_name <-samp_full5_gen[,paste0(LGtext[i],"cluster_name")]
+str(pca_inv)
+# just a quick check that everything lines up
+plot(pca_inv$u[,1], pca_inv$u[,2], col=pca_inv$cluster_name)
+#### end snp thinning
+
+
+rda_gen <- G_LGX[samprows,thinned_snps]
 dim(G_LGX)
-rda_gen <- G_LGX[samprows,]
-dim(rda_gen)  
+dim(rda_gen) 
 
+# check the sample dataframe issamp_full# check the sample dataframe is identical
+if (!identical(rownames(rda_traits), rownames(rda_gen))){print("Error"); break()} 
 
 rda_lgx <- rda(rda_gen~rda_traits)
+
+# eigenvalues
+a<- screeplot(rda_lgx)
+eigen <- a$y
+# proportion of expl. variance for each RDA axis
+prop_var <- round(a$y/sum(a$y),3)
+print(prop_var)
+# cumulative proportion of variance
+cumsum(prop_var)
+print(cumsum(prop_var))
+
+K=4
+
+# Save loadings output
+biplot <- (as.data.frame(rda_lgx$CCA$biplot[,1:K]))
+print(biplot)
+cumimpmat <- abs(t(biplot)*prop_var[1:K])
+colnames(cumimpmat) <- subtraits
+
+#plot cum imp
+pdf(paste0("../figures/",LGtext[i],"_RDACumImp.pdf"), width=7, height=4)
+  barplot(cumimpmat, las=2, xlim=c(0,15), 
+          main=LGtext[i], 
+          col=grey.colors(4, start=0.3, end=0.9), 
+          ylab="Cumulative Importance")
+  legend("right", paste0("RDA ",4:1,", ",
+                        round(prop_var[4:1],2)*100,"%"),
+         bty="n", adj=0, 
+         fill=grey.colors(4, start=0.9, end=0.3),
+         cex=1)
+dev.off()
+
+biplot$cumImp <- colSums(cumimpmat)
+biplot <- rbind(biplot, c(prop_var[1:K], NA))
+rownames(biplot)[nrow(biplot)] <- "Prop_Var"
+biplot
+write.table(biplot, file=paste0("../outputs/RDA_biplot_", LGtext[i],".txt"))
+
+# loop through each trait and get the predicted value from the RDA
+for (j in 1: (nrow(biplot)-1)){
+  samp_inv_morph$traitname <- rownames(biplot)[j]
+  samp_inv_morph$trait_pred <- rda_trait_pred(rda_lgx, j, K)
+  samp_inv_morph_full <- rbind(samp_inv_morph_full,samp_inv_morph)
+}
+
+
 
 scores <- scores(rda_lgx)
 str(scores)
 
-samp_full4[samprows,paste0(LGtext[i],"RDA1")] <- scores$sites[,1]
-samp_full4[samprows,paste0(LGtext[i],"RDA2")] <- scores$sites[,2]
+samp_full5_gen[,paste0(LGtext[i],"RDA1")] <- scores$sites[,1]
+samp_full5_gen[,paste0(LGtext[i],"RDA2")] <- scores$sites[,2]
  
 max=max(c(scores$sites[,1], scores$sites[,2]))
 min=min(c(scores$sites[,1], scores$sites[,2]))
@@ -275,15 +407,16 @@ rownames(bp) <- subtraits
 bp
 
 
-TO DO: Replot this with genotype in colors and region in symbols
-
-g <- ggplot() + ggtheme + 
-  geom_point(data=samp_full4, 
+#Plot
+samp_full5_gen$Ecotype2 <- paste0(samp_full5_gen$Ecotype.x,"-",
+                                 samp_full5_gen$Region)
+g3 <- ggplot() + ggtheme + 
+  geom_point(data=samp_full5_gen, 
              aes(x=get(paste0(LGtext[i],"RDA1")),
                 y=get(paste0(LGtext[i],"RDA2")),
-            pch=get(paste0(LGtext[i],"cluster_name")),
-            color=get(paste0(LGtext[i],"cluster_name"))
-    )) +  
+            shape=get(paste0(LGtext[i],"cluster_nameB")),
+            color=Ecotype2
+    )) + scale_color_manual(values=c("lightblue","cornflowerblue","darkviolet")) +
   geom_segment(data=bp, 
                aes(x=0, y=0, 
                    xend=RDA1, 
@@ -291,13 +424,51 @@ g <- ggplot() + ggtheme +
   geom_text(data=bp, 
             aes(x=RDA1, y=RDA2, 
                 label=names), hjust=0) + 
-  xlab("RDA1")+ ylab("RDA2") + 
+  xlab(paste0("RDA1 (", round(biplot["Prop_Var",1],2)*100,"%)"))+
+  ylab(paste0("RDA2 (", round(biplot["Prop_Var",2],2)*100,"%)")) + 
   theme(legend.title = element_blank()) + 
   ggtitle(LGtext[i])
-g
-ggsave(filename=paste0("../figures/",LGtext[i],"_RDA.pdf"), g, width = 5, height=4)
-       
+g3
+ggsave(filename=paste0("../figures/",LGtext[i],"_RDA_3.pdf"), g3, width = 5, height=4)
 } # end loop
 
 head(samp_full2)
+```
+
+# Trait prediciton
+```{r, trait prediction}
+
+traittext <- unique(samp_inv_morph_full$traitname)
+subtraits
+
+
+i=1
+sub <- samp_inv_morph_full[samp_inv_morph_full$traitname==traittext[i],]
+str(sub)
+sub$label <- as.factor(sub$label)
+sub$Inv <- as.factor(sub$Inv)
+head(sub)
+if(!dim(sub)[1]/255==4){print("Error in dimensions");break} #this should be four
+sub$trait <- rda_traits[,subtraits[i]]
+head(sub)
+
+sub$color <- 
+
+rda_traits <- as.data.frame(rda_traits)
+str(rda_traits)
+rda_traits2<- rda_traits[order(rda_traits$cD1),]
+rda_traits2$label <- rownames(rda_traits2)
+head(rda_traits2)
+g2a <- ggplot(data=sub, aes(x=trait_pred, y=label)) +
+  geom_bar(stat="identity")
+g2a
+barplot(t(sub[order(sub$label),"trait_pred"]), horiz=TRUE)
+
+ggsave(filename=paste0("../figures/RDA_cD1_values.pdf"), g2a, width = 15, height=20)
+
+
+g2 <- ggplot(data=sub, aes(fill=Inv, x=trait_pred, y=cD1_order)) + 
+           geom_bar(position="stack", stat="identity") 
+g2
+ggsave(filename=paste0("../figures/RDA_cD1_predict.pdf"), g2, width = 15, height=20)
 ```
