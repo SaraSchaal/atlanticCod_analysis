@@ -228,17 +228,17 @@ if (i == 3){
 if (i == 4){
   ### LG12 Cluster descriptions ####
   #  * Cluster 1 is heterokaryotypes from Iceland - "HET-Iceland"
-  #  * Cluster 2 is heterokaryotypes from Maine - "HET-GoM"
+  #  * Cluster 2 is homozygous for the alternate arrangement from Maine - "ALT-GoM"
   #  * Cluster 3 is homozygous for the reference arrangement from Iceland "REF-Iceland"
-  #  * Cluster 4 is homozygous for the alternate arrangement from Maine - "ALT-GoM"
+  #  * Cluster 4 is heterokaryotypes from Maine - "HET-GoM"
   #  * Cluster 5 is homozygous for the reference arrangement from GoM - "REF-GoM"
   #  * Cluster 6 is homozygous for the alternate arrangement from Iceland - "ALT-ICELAND"
 
   levels(samp_full[,paste0(LGtext[i], "cluster_name")]) <- c(
     "HET-Iceland", 
-    "HET-GoM", 
-    "REF-Iceland",
     "ALT-GoM", 
+    "REF-Iceland",
+    "HET-GoM", 
     "REF-GoM",
     "ALT-Iceland"
   )

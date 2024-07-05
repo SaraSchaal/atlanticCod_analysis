@@ -224,44 +224,66 @@ colnames(samp_full4_gen)[traitcols]
 # check the sample dataframe samp_full# check the sample dataframe is identical
 if (!identical(samp_full4_gen$label, samp)){print("Error"); break()} 
 
+# weird fish
+# Fish with row label 131 has extreme values of three of the measurements cD10, cD13, cD16, and cD17.
+summary(samp_full4_gen$cD16)
+summary(samp_full4_gen$cD13)
+summary(samp_full4_gen$cD10)
+summary(samp_full4_gen$cD17)
+
+rmv <- which(samp_full4_gen$cD16==max(samp_full4_gen$cD16, na.rm=TRUE))
+samp_full4_gen[rmv,]
+
 # get the rows that don't have NA for trait values
-samprows <- which(!is.na(samp_full4_gen$cD1))
+samprows <- which(!is.na(samp_full4_gen$cD1) &
+                    !(samp_full4_gen$cD16==
+                       max(samp_full4_gen$cD16, na.rm=TRUE)
+                     )
+                  )
+                  
 length(samprows)
 
 samp_full5_gen <- samp_full4_gen[samprows,]
   
 # check trait correlations
 cortraits <- cor(samp_full5_gen[, traitcols])
+
+pdf("../figures/traits_corrs.pdf", width=6, height=6)
 corrplot(cortraits)
+dev.off()
 heatmap(cortraits, scale="none")
 
 # use clustering to choose representative traits
-trait_groups <- cutree(hclust(dist(cortraits, diag=TRUE)), k=9)
+trait_groups <- cutree(hclust(dist(cortraits, diag=TRUE)), k=7)
 trait_groups
 write(trait_groups,"../outputs/traitgroups.txt")
 
 # Determine subset of representative traits
-subtraits = c("cD1", "cD3", "cD4", "cD5", "cD10", "cD13", "cD16", "cD18", "cD19") # hard coding!
+subtraits = c("cD1", "cD5", "cD7", "cD10", "cD13", "cD17", "cD18")    # hard coding!
 
 subTraitCols <- which(colnames(samp_full5_gen) %in% subtraits)
 # check trait correlations
-cortraits2 <- cor(samp_full5_gen[, subTraitCols])
-cortraits2 # all correlations are less than 0.75
+  cortraits2 <- cor(samp_full5_gen[, subTraitCols])
+  cortraits2 # all correlations are less than 0.45
+  max(abs(cortraits2[upper.tri(cortraits2, diag=FALSE)]))
 
 pdf("../figures/RDA_trait_corrs.pdf", width=7, height=7)
-corrplot(cortraits2)
-heatmap(cortraits2, scale="none")
+  corrplot(cortraits2)
 dev.off()
+```
+
 
 #complete data for RDA
+```{r, rda data}
 rda_traits <- scale(samp_full5_gen[,subTraitCols])
 summary(rda_traits)
-
+str(rda_traits)
 rownames(rda_traits) <- samp_full5_gen$label
 dim(rda_traits)
 head(rda_traits)
 ```
 
+## RDA trait prediction function from Lotterhos 2023 PNAS
 ```{r, rda_trait_pred function}
 rda_trait_pred <- function(rdaobj, env_row, K){
   #rdaobj is RDA object
@@ -279,6 +301,7 @@ rda_trait_pred <- function(rdaobj, env_row, K){
 
 ```
 
+# RDAs
 ```{r rdas}
 
 
@@ -331,6 +354,7 @@ pca_inv$cluster_name <-samp_full5_gen[,paste0(LGtext[i],"cluster_name")]
 str(pca_inv)
 # just a quick check that everything lines up
 plot(pca_inv$u[,1], pca_inv$u[,2], col=pca_inv$cluster_name)
+text(pca_inv$u[,1], pca_inv$u[,2], labels=pca_inv$cluster_name)
 #### end snp thinning
 
 
@@ -362,16 +386,16 @@ cumimpmat <- abs(t(biplot)*prop_var[1:K])
 colnames(cumimpmat) <- subtraits
 
 #plot cum imp
-pdf(paste0("../figures/",LGtext[i],"_RDACumImp.pdf"), width=7, height=4)
-  barplot(cumimpmat, las=2, xlim=c(0,15), 
+pdf(paste0("../figures/",LGtext[i],"_RDACumImp.pdf"), width=7, height=6)
+  barplot(cumimpmat, las=2, ylim=c(0,0.4), 
           main=LGtext[i], 
           col=grey.colors(4, start=0.3, end=0.9), 
           ylab="Cumulative Importance")
-  legend("right", paste0("RDA ",4:1,", ",
-                        round(prop_var[4:1],2)*100,"%"),
+  legend("top", paste0("RDA ",1:4,", ",
+                        round(prop_var[1:4],2)*100,"%"),
          bty="n", adj=0, 
-         fill=grey.colors(4, start=0.9, end=0.3),
-         cex=1)
+         fill=grey.colors(4, start=0.3, end=0.9),
+         cex=1, ncol=4)
 dev.off()
 
 biplot$cumImp <- colSums(cumimpmat)
@@ -441,34 +465,66 @@ head(samp_full2)
 traittext <- unique(samp_inv_morph_full$traitname)
 subtraits
 
+for (i in 1:length(subtraits)){
+  print(traittext[i])
+  print(subtraits[i])
+  sub <- samp_inv_morph_full[samp_inv_morph_full$traitname==traittext[i],]
+  str(sub)
+  sub$label <- as.factor(sub$label)
+  sub$Inv <- as.factor(sub$Inv)
+  head(sub)
+  if(!dim(sub)[1]/254==4){print("Error in dimensions");break} #this should be four
+  sub$trait <- rda_traits[,subtraits[i]]
+  head(sub)
+  sub$pop <- NA
+  sub$pop[grep("GoM_1-Nearshore",sub$label)] <- "Nearshore GoM"
+  sub$pop[grep("Iceland_2-Offshore",sub$label)] <- "Offshore Iceland"
+  sub$pop[grep("Iceland_1-Nearshore",sub$label)] <- "Nearshore Iceland"
+  sub$pop <- as.factor(sub$pop)
+  str(sub$pop)
+  levels(sub$pop)
+  
+  rda_traits <- as.data.frame(rda_traits)
+  str(rda_traits)
+  rda_traits2<- rda_traits[order(rda_traits$cD1),]
+  rda_traits2$label <- rownames(rda_traits2)
+  head(rda_traits2)
+  
+  sub$Inv <- factor(sub$Inv, levels=c("LG1", "LG2", "LG7", "LG12"), ordered=TRUE)
+  str(sub$Inv)
+  
+  head(sub)
+  
+  g2pop <- ggplot(data=sub) + ggtitle(subtraits[i]) +
+             geom_bar(
+                      aes(fill=Inv, x=trait_pred, y=pop),
+                      position="stack", stat="identity") +
+    ggtheme + scale_fill_manual(values=magma(4, begin=0, end=0.8 )) 
+  g2pop
+  
+  g2 <- ggplot(data=sub) + ggtitle(subtraits[i]) +
+             geom_bar(
+                      aes(fill=Inv, x=trait_pred, y=label),
+                      position="stack", stat="identity") +
+    ggtheme + scale_fill_manual(values=magma(4, begin=0, end=0.8 )) 
+  g2
+    
+  g2
+  ggsave(filename=paste0("../figures/RDA_",subtraits[i],"_predict.pdf"), g2, width = 15, height=20)
+  ggsave(filename=paste0("../figures/RDA_",subtraits[i],"_predict_pop.pdf"), g2pop, width = 5, height=5)
+  
+  pdf(paste0("../figures/RDA_rawtrait_",subtraits[i],".pdf"),
+             height=8, width=8)
+  par(mar=c(10,4,0,0))
+  boxplot(samp_full5_gen[,subtraits[i]]~samp_full5_gen$PopID, las=2,
+          xlab="", ylab=subtraits[i])
+  boxplot(samp_full5_gen[,subtraits[i]]~samp_full5_gen$Ecotype2, las=2,
+          xlab="", ylab=subtraits[i])
+  dev.off()
+}
 
-i=1
-sub <- samp_inv_morph_full[samp_inv_morph_full$traitname==traittext[i],]
-str(sub)
-sub$label <- as.factor(sub$label)
-sub$Inv <- as.factor(sub$Inv)
-head(sub)
-if(!dim(sub)[1]/255==4){print("Error in dimensions");break} #this should be four
-sub$trait <- rda_traits[,subtraits[i]]
-head(sub)
-
-sub$color <- 
-
-rda_traits <- as.data.frame(rda_traits)
-str(rda_traits)
-rda_traits2<- rda_traits[order(rda_traits$cD1),]
-rda_traits2$label <- rownames(rda_traits2)
-head(rda_traits2)
-g2a <- ggplot(data=sub, aes(x=trait_pred, y=label)) +
-  geom_bar(stat="identity")
-g2a
-barplot(t(sub[order(sub$label),"trait_pred"]), horiz=TRUE)
-
-ggsave(filename=paste0("../figures/RDA_cD1_values.pdf"), g2a, width = 15, height=20)
 
 
-g2 <- ggplot(data=sub, aes(fill=Inv, x=trait_pred, y=cD1_order)) + 
-           geom_bar(position="stack", stat="identity") 
-g2
-ggsave(filename=paste0("../figures/RDA_cD1_predict.pdf"), g2, width = 15, height=20)
 ```
+
+
