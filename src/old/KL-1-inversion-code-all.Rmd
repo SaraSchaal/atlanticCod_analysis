@@ -1,0 +1,578 @@
+---
+title: "Cod Inversions"
+author: "KE Lotterhos"
+date: "2024-03-18"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+
+```{r setup, include=FALSE, eval=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+install.packages("bigstatsr")
+install.packages("bigsnpr")
+install.packages("devtools")
+
+install.packages("vcfR")
+if (!require("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+
+BiocManager::install("qvalue", force=TRUE)
+devtools::install_github("whitlock/OutFLANK", force=TRUE)
+
+install.packages("pheatmap")
+
+```
+#install_github("jokergoo/ComplexHeatmap") Didn't install
+#didn't install BiocManager::install("inveRsion")
+
+# Load packages and data
+```{r}
+library(devtools)
+library(bigstatsr)
+library(bigsnpr)
+library(ggplot2)
+library(OutFLANK)
+library(vegan)
+library(pheatmap)
+sessionInfo()
+
+datadir <- "/Users/lotterhos/Library/CloudStorage/GoogleDrive-k.lotterhos@gmail.com/.shortcut-targets-by-id/1DPJy8RgFslz3_PSZLLl7Z21mCvQUvnJZ/Manuscripts/Cod Ecotypes GoM /data/"
+
+bigSNP <- snp_attach(paste0(datadir,  "acod_merged.MAF05_QC.rds"))
+
+#  drop the individual at the 17th position because it is a duplicate. 
+#It was a fish that was right in the middle of being red or olive and 
+#it accidentally got left in both groups and got sequenced twice. 
+
+G_full <- bigSNP$genotypes[-17,]
+pos_full <- bigSNP$map$physical.pos
+samp_full <- bigSNP$fam$sample.ID[-17]
+pop_full <- bigSNP$fam$family.ID[-17]
+chrom_full <- bigSNP$map$chromosome
+
+unique(chrom_full)
+dim(G_full)
+NCORES <- nb_cores()
+
+head(bigSNP$fam)
+head(samp_full)
+
+```
+
+```{r population table}
+
+pop.names <- paste0("Pop", 1:9)
+pop.IDs<- c("GoM.Mass.Olive.Winter", 
+            "GoM.Mass.Red", 
+            "GoM.Mass.Olive.Unknown", 
+            "GoM.Cashes.Olive", 
+            "GoM.Cashes.Red",
+            "Ice.Off.SW", 
+            "Ice.Near.SW", 
+            "Ice.Off.NE", 
+            "Ice.Near.NE")
+pop.IDs2 <- c("GoM Nearshore Olive - Winter Spawner",
+              "GoM Nearshore Red",
+              "GoM Nearshore Olive",
+              "GoM Nearshore Olive",
+              "GoM Nearshore Red",
+              "Iceland Offshore",
+              "Iceland Nearshore",
+              "Iceland Offshore",
+              "Iceland Nearshore")
+region <- c(rep("GoM", 5), rep("Iceland", 4))
+ecotype <- c(rep("Nearshore",5), "Offshore", "Nearshore", 
+             "Offshore", "Nearshore")
+pop.colors <- c(adjustcolor("darkgreen",1), #mass winter
+                adjustcolor("salmon",1), #mass red
+                adjustcolor("goldenrod3",0.5), #mass unknown
+                adjustcolor("darkgreen",0.75), #cashes olive
+                adjustcolor("salmon",0.75), #cashes red
+                adjustcolor("darkviolet",1), # Iceland SW Off
+                adjustcolor("cornflowerblue",0.5), #Iceland SW Near
+                adjustcolor("darkviolet",0.5), #Iceland NE Off
+                adjustcolor("cornflowerblue",1) #Iceland NE Near
+                )
+
+pop2.colors <- c(adjustcolor("darkgreen",1), #mass winter
+                adjustcolor("salmon",1), #mass red
+                adjustcolor("darkgreen",0.5), #mass unknown
+                adjustcolor("darkgreen",0.5), #cashes olive
+                adjustcolor("salmon",1), #cashes red
+                adjustcolor("darkviolet",0.75), # Iceland SW Off
+                adjustcolor("cornflowerblue",1), #Iceland SW Near
+                adjustcolor("darkviolet",0.75), #Iceland NE Off
+                adjustcolor("cornflowerblue",1) #Iceland NE Near
+                )
+
+write.table(data.frame(pop.names,pop.IDs, pop.colors, region, ecotype, pop.IDs2, pop2.colors), "../outputs/1-Pops.txt", row.names=FALSE)
+write("This file contains population-level information
+      pop.names: Numbered population ID corresponding to some files
+      pop.IDs: Specific Geographic Location
+      pop.colors: Color corresponding to pop.IDs
+      region: Iceland or GoM
+      ecotype: Nearshore or Offshore
+      pop.IDs2: An ID based on ecotype and geographic region
+      pop2.colors: Color corresponding to pop.IDs2
+      ",
+      "../outputs/1-Pops.txt.metadata.md")
+
+
+```
+
+```{r, add sample info}
+samp_full <- data.frame(samp_full)
+
+#Remove sample 17, duplicate
+samp_full$Pop <- as.factor(bigSNP$fam$family.ID[-17])
+
+
+# Add population name to smaple dataframe
+samp_full$PopID <- factor(samp_full$Pop, ordered=TRUE)
+levels(samp_full$PopID) = pop.IDs # this works because the 
+# populations are numbered
+
+head(samp_full)
+levels(samp_full$PopID)
+
+samp_full$Region <- "GoM"
+samp_full$Region[samp_full$Pop %in% c("Pop6", "Pop7",
+  "Pop8", "Pop9")] = "Iceland"
+samp_full$Ecotype <- "1-Nearshore"
+samp_full$Ecotype[samp_full$Pop %in% c("Pop6", "Pop8")] <- "2-Offshore"
+
+samp_full$Region <- as.factor(samp_full$Region)
+samp_full$Ecotype <- as.factor(samp_full$Ecotype)
+head(samp_full)
+tail(samp_full)
+
+samp_full$label <- paste(samp_full$Region,samp_full$Ecotype, samp_full$PopID, samp_full$samp_full, sep="_")
+
+
+### colors for Region and Ecotype ####
+samp_full$Region_color <- as.factor(samp_full$Region)
+levels(samp_full$Region_color) <- c("blue4", "darkgoldenrod")
+samp_full$Region_color <- as.character(samp_full$Region_color) # convert factor back to character 
+
+samp_full$Ecotype_color <- as.factor(samp_full$Ecotype)
+levels(samp_full$Ecotype_color) <- c("darkcyan", "seagreen2") 
+samp_full$Ecotype_color <- as.character(samp_full$Ecotype_color) # convert factor back to character 
+
+### colors for populations ####
+samp_full$PopID_color <- as.factor(samp_full$Pop)
+levels(samp_full$PopID_color) <- pop.colors # this works because the populations are ordered by number
+
+samp_full$PopID_color <- as.character(samp_full$PopID_color )
+
+
+```
+
+```{r, add muts info}
+muts <- data.frame(chrom_full, pos_full, Glabel = paste(chrom_full,pos_full, sep="__"))
+
+colnames(G_full) <- muts$Glabel
+
+rownames(G_full) <- samp_full$label
+
+```
+
+
+
+## Step 1: Subset data to 50,000 random SNPs and perform PCA.
+
+```{r}
+set.seed(29435798)
+index <- sort(sample(1:length(pos_full), 50000))
+
+Gsub <- G_full[,index]
+
+
+# Recode for bigsnpr package tools
+Gsub_snp <- add_code256(big_copy(Gsub,type="raw"),code=bigsnpr:::CODE_012) 
+
+# PCA
+# make sure this is run on a code 256 type
+# snp object, or it will run forever!
+set.seed(6345082)
+svd7 <- big_randomSVD(Gsub_snp, 
+                      snp_scaleBinom(), 
+                      ncores = NCORES,
+                      k=2)
+
+
+# Add PC loadings to sample info
+samp_full$Gsub_PC1 <-  svd7$u[,1]
+samp_full$Gsub_PC2 <-  svd7$u[,2]
+
+# Add PC loadings to muts
+muts$Gsub_PC1 <- muts$Gsub_PC2 <-NA
+muts$Gsub_PC1[index] <- svd7$v[,1]
+muts$Gsub_PC2[index] <- svd7$v[,2]
+
+#plot(abs(muts$Gsub_PC1), pch=19, col=adjustcolor("blue",0.01))
+```
+
+## Perform PCAs on individual linkage groups to identify inversion breakpoints
+
+# Chrom 1
+```{r, fig.width=8}
+
+index <- sort(which(muts$chrom_full=="NC_044048.1"))
+Gsub <- G_full[,index]
+# Recode for bigsnpr package tools
+Gsub_snp <- add_code256(big_copy(Gsub,type="raw"),code=bigsnpr:::CODE_012) 
+set.seed(62385534)
+svd7 <- big_randomSVD(Gsub_snp, 
+                      snp_scaleBinom(), 
+                      ncores = NCORES,
+                      k=2)
+
+muts$Gsub_LG1_PC1 <- NA
+muts$Gsub_LG1_PC1[index] <- svd7$v[,1]
+
+# Chrom 1
+plot(muts$pos_full[muts$chrom_full=="NC_044048.1"], 
+     abs(muts$Gsub_LG1_PC1[muts$chrom_full=="NC_044048.1"]), 
+     pch=19, col=adjustcolor("blue",0.1), 
+     main="LG1", ylab="PC1 loading", xlab="position (bp)")
+
+(maxload1 <- quantile(abs(muts$Gsub_LG1_PC1), probs=0.99, na.rm=TRUE))
+abline(h=maxload1)
+
+#start
+LG1start <- min(which(abs(muts$Gsub_LG1_PC1)>maxload1))
+LG1end <- max(which(abs(muts$Gsub_LG1_PC1)>maxload1))
+
+muts[LG1start ,]
+
+LG1start_minus1MB <- max(which(muts$pos_full<muts$pos_full[LG1start]-1000000 & muts$chrom_full=="NC_044048.1"))
+muts[LG1start_minus1MB,]
+
+muts[LG1end,]
+
+LG1end_plus1MB <- max(which(muts$pos_full<muts$pos_full[LG1end]+1000000 & muts$chrom_full=="NC_044048.1"))
+muts[LG1end_plus1MB,]
+
+plot(muts$pos_full[LG1start_minus1MB:LG1end_plus1MB], 
+     abs(muts$Gsub_LG1_PC1[LG1start_minus1MB:LG1end_plus1MB]), 
+     pch=19, col=adjustcolor("blue",0.1), 
+     main="LG1", ylab="PC1 loading", xlab="position (bp)")
+abline(v=muts$pos_full[LG1start], col="orange", lwd=2)
+abline(v=muts$pos_full[LG1end], col="orange", lwd=2)
+abline(h=maxload1, col="lightgrey")
+```
+
+# Chrom 2
+```{r, fig.width=8}
+
+index <- sort(which(muts$chrom_full=="NC_044049.1"))
+Gsub <- G_full[,index]
+# Recode for bigsnpr package tools
+Gsub_snp <- add_code256(big_copy(Gsub,type="raw"),code=bigsnpr:::CODE_012) 
+set.seed(235540968)
+svd7 <- big_randomSVD(Gsub_snp, 
+                      snp_scaleBinom(), 
+                      ncores = NCORES,
+                      k=2)
+
+muts$Gsub_LG2_PC1 <- NA
+muts$Gsub_LG2_PC1[index] <- svd7$v[,1]
+
+# Chrom 2
+plot(muts$pos_full[muts$chrom_full=="NC_044049.1"], 
+     abs(muts$Gsub_LG2_PC1[muts$chrom_full=="NC_044049.1"]), 
+     pch=19, col=adjustcolor("blue",0.1), 
+     main="LG2", ylab="PC1 loading", xlab="position (bp)")
+
+(maxload1 <- quantile(abs(muts$Gsub_LG2_PC1), probs=0.99, na.rm=TRUE))
+abline(h=maxload1)
+
+#start
+LG2start <- min(which(abs(muts$Gsub_LG2_PC1)>maxload1))
+LG2end <- max(which(abs(muts$Gsub_LG2_PC1)>maxload1))
+
+muts[LG2start ,]
+
+LG2start_minus1MB <-min(which(muts$chrom_full=="NC_044049.1"))
+# in this case it's just the start of the chromosome
+muts[LG2start_minus1MB,]
+
+muts[LG2end,]
+
+LG2end_plus1MB <- max(which(muts$pos_full<muts$pos_full[LG2end]+1000000 & muts$chrom_full=="NC_044049.1"))
+muts[LG2end_plus1MB,]
+
+plot(muts$pos_full[LG2start_minus1MB:LG2end_plus1MB], 
+     abs(muts$Gsub_LG2_PC1[LG2start_minus1MB:LG2end_plus1MB]), 
+     pch=19, col=adjustcolor("blue",0.1), 
+     main="LG2", ylab="PC1 loading", xlab="position (bp)")
+abline(v=muts$pos_full[LG2start], col="orange", lwd=2)
+abline(v=muts$pos_full[LG2end], col="orange", lwd=2)
+abline(h=maxload1, col="lightgrey")
+```
+
+# Chrom 7
+```{r, fig.width=8}
+
+index <- sort(which(muts$chrom_full=="NC_044054.1"))
+Gsub <- G_full[,index]
+# Recode for bigsnpr package tools
+Gsub_snp <- add_code256(big_copy(Gsub,type="raw"),code=bigsnpr:::CODE_012) 
+set.seed(42348064)
+svd7 <- big_randomSVD(Gsub_snp, 
+                      snp_scaleBinom(), 
+                      ncores = NCORES,
+                      k=2)
+
+muts$Gsub_LG7_PC1 <- NA
+muts$Gsub_LG7_PC1[index] <- svd7$v[,1]
+
+# Chrom 7
+plot(muts$pos_full[muts$chrom_full=="NC_044054.1"], 
+     abs(muts$Gsub_LG7_PC1[muts$chrom_full=="NC_044054.1"]), 
+     pch=19, col=adjustcolor("blue",0.1), 
+     main="LG7", ylab="PC1 loading", xlab="position (bp)")
+
+(maxload1 <- quantile(abs(muts$Gsub_LG7_PC1), probs=0.99, na.rm=TRUE))
+abline(h=maxload1)
+
+#start
+LG7start <- min(which(abs(muts$Gsub_LG7_PC1)>maxload1))
+LG7end <- max(which(abs(muts$Gsub_LG7_PC1)>maxload1))
+
+muts[LG7start ,]
+
+LG7start_minus1MB <-max(which(muts$pos_full<muts$pos_full[LG7start]-1000000 & muts$chrom_full=="NC_044054.1"))
+# in this case it's just the start of the chromosome
+muts[LG7start_minus1MB,]
+
+muts[LG7end,]
+
+LG7end_plus1MB <- max(which(muts$pos_full<muts$pos_full[LG7end]+1000000 & muts$chrom_full=="NC_044054.1"))
+muts[LG7end_plus1MB,]
+
+plot(muts$pos_full[LG7start_minus1MB:LG7end_plus1MB], 
+     abs(muts$Gsub_LG7_PC1[LG7start_minus1MB:LG7end_plus1MB]), 
+     pch=19, col=adjustcolor("blue",0.1), 
+     main="LG7", ylab="PC1 loading", xlab="position (bp)")
+abline(v=muts$pos_full[LG7start], col="orange", lwd=2)
+abline(v=muts$pos_full[LG7end], col="orange", lwd=2)
+abline(h=maxload1, col="lightgrey")
+```
+
+
+# Chrom 12
+```{r, fig.width=8}
+
+index <- sort(which(muts$chrom_full=="NC_044059.1"))
+Gsub <- G_full[,index]
+# Recode for bigsnpr package tools
+Gsub_snp <- add_code256(big_copy(Gsub,type="raw"),code=bigsnpr:::CODE_012) 
+set.seed(73240982)
+svd7 <- big_randomSVD(Gsub_snp, 
+                      snp_scaleBinom(), 
+                      ncores = NCORES,
+                      k=2)
+
+muts$Gsub_LG12_PC1 <- NA
+muts$Gsub_LG12_PC1[index] <- svd7$v[,1]
+
+# Chrom 12
+plot(muts$pos_full[muts$chrom_full=="NC_044059.1"], 
+     abs(muts$Gsub_LG12_PC1[muts$chrom_full=="NC_044059.1"]), 
+     pch=19, col=adjustcolor("blue",0.1), 
+     main="LG12", ylab="PC1 loading", xlab="position (bp)")
+
+
+(maxload1 <- quantile(abs(muts$Gsub_LG12_PC1), probs=0.99, na.rm=TRUE))
+abline(h=maxload1)
+
+
+#start
+LG12start <- min(which(abs(muts$Gsub_LG12_PC1)>maxload1))
+LG12end <- max(which(abs(muts$Gsub_LG12_PC1)>maxload1))
+
+muts[LG12start ,]
+
+LG12start_minus1MB <-max(which(muts$pos_full<muts$pos_full[LG12start]-1000000 & muts$chrom_full=="NC_044059.1"))
+# in this case it's just the start of the chromosome
+muts[LG12start_minus1MB,]
+
+muts[LG12end,]
+
+LG12end_plus1MB <- max(which(muts$pos_full<muts$pos_full[LG12end]+1000000 & muts$chrom_full=="NC_044059.1"))
+muts[LG12end_plus1MB,]
+
+plot(muts$pos_full[LG12start_minus1MB:LG12end_plus1MB], 
+     abs(muts$Gsub_LG12_PC1[LG12start_minus1MB:LG12end_plus1MB]),
+     pch=19, col=adjustcolor("blue",0.1), 
+     main="LG12", ylab="PC1 loading", xlab="position (bp)")
+abline(v=muts$pos_full[LG12start], col="orange", lwd=2)
+abline(v=muts$pos_full[LG12end], col="orange", lwd=2)
+abline(h=maxload1, col="lightgrey")
+```
+
+
+
+### summarize breakpoints
+
+```{r}
+breakpoints <- data.frame(
+  LG = c("LG1","LG2", "LG7","LG12"),
+  LGstartIndex = c(LG1start,LG2start,LG7start,LG12start),
+  LGendIndex = c(LG1end,LG2end,LG7end,LG12end),
+  chrom=chrom_full[c(LG1start,LG2start,LG7start,LG12start)],
+  LGstartPos = pos_full[c(LG1start,LG2start,LG7start,LG12start)],
+  LGendPos = pos_full[c(LG1end,LG2end,LG7end,LG12end)],
+  LGstartPos_minus1MB_index = c(LG1start_minus1MB,
+                                LG2start_minus1MB,
+                                LG7start_minus1MB,
+                                LG12start_minus1MB),
+  LGendPos_plus1MB_index =c(LG1end_plus1MB,
+                                LG2end_plus1MB,
+                                LG7end_plus1MB,
+                                LG12end_plus1MB)
+)
+```
+
+### Add additional categories to sample df
+```{r}
+scale_color_manual(values=
+samp_full$Ecotype2 <- factor(paste0(samp_full$Ecotype,"-",
+                                 samp_full$Region), ordered=TRUE)
+levels(samp_full$Ecotype2)
+samp_full$Ecotype2_color <- samp_full$Ecotype2 
+levels(samp_full$Ecotype2_color) <- c("lightblue","cornflowerblue","darkviolet")
+levels(samp_full$Ecotype2_color)
+str(samp_full$Ecotype2_color)
+```
+
+# PC just on inversions
+
+## Get all LG indexes
+```{r}
+LGind <- c(LG1start:LG1end, LG2start:LG2end,
+           LG7start:LG7end, LG12start:LG12end)
+
+G_LG <- G_full[,LGind]
+
+dim(G_full)
+G_nonInv <- G_full[,-LGind]
+dim(G_nonInv)
+set.seed(34594323)
+G_nonInv_subset <- G_nonInv[,sample(1:ncol(G_nonInv), 100000,
+                                    replace=FALSE)]
+dim(G_nonInv_subset)
+saveRDS(G_nonInv_subset, file="../outputs/G_nonInv_subset.RDS")
+write("This file contains a genotype matrix with 100000 SNPs randomly sampled from non-inversion regions, output from file KL-1 inversion code all.Rmd. The samples are in rows and the SNPs are in columns. Each cell stores the number of copies of the alternate allele.",
+      "../outputs/G_nonInv_subset.metadata")
+
+head(colnames(G_LG))
+head(rownames(G_LG))
+
+dim(G_LG)
+
+# Recode for bigsnpr package tools
+G_LG_snp <- add_code256(big_copy(G_LG,type="raw"),code=bigsnpr:::CODE_012) 
+
+# PCA
+# make sure this is run on a code 256 type
+# snp object, or it will run forever!
+set.seed(3459723)
+svd7 <- big_randomSVD(G_LG_snp, 
+                      snp_scaleBinom(), 
+                      ncores = NCORES,
+                      k=2)
+
+
+samp_full$G_AllInv_PC1 <- svd7$u[,1]
+samp_full$G_AllInv_PC2 <- svd7$u[,2]
+
+str(samp_full)
+pdf("../figures/PCA-samples-inversion-SNPs-only.pdf", width=6, height=6)
+ggplot(samp_full) + geom_point(aes(x=G_AllInv_PC1,
+                                   y=G_AllInv_PC2,
+                                    colour = PopID,
+                                   shape= Ecotype,
+                                   pch=Ecotype,
+                                   size=Ecotype)) +
+    scale_colour_manual(values=pop.colors) +
+      xlab("Sample loadings PC1 - inversion SNPs only") +
+    ylab("Sample loadings PC2 - inversion SNPs only") +
+  theme_classic()
+dev.off()
+
+dist <- dist(G_LG, diag=TRUE)
+
+str(dist)
+hc <- hclust(dist)
+str(hc)
+dhc <- as.dendrogram(hc)
+cut_avg <- cutree(hc, k = 5)
+str(cut_avg)
+str(dhc)
+# https://www.datacamp.com/tutorial/hierarchical-clustering-R
+pdf("../figures/Hclust-inversionSNPsonly.pdf", width=15, height=10)
+plot(hc, cex=0.3)
+rect.hclust(hc , k = 5, border=2:6)
+dev.off()
+
+samp_full$InvHclustOrder <- hc$order
+samp_full$InvHclustK5 <- as.numeric(cut_avg)
+
+# this looks like SW near in Iceland is more closely related to GOM then NE NEar in Iceland
+table(samp_full$PopID, samp_full$InvHclustK5)
+
+pdf("../figures/Hclust-inversionSNPsonly-heatmap.pdf", width=15, height=15)
+par(oma=c(8,4,4,8))
+heatmap(as.matrix(dist), cexRow=0.2, cexCol=0.2, scale="none", ColSideColors=samp_full$PopID_color, RowSideColors=samp_full$PopID_color, )
+dev.off()
+```
+
+# save outputs
+```{r}
+
+head(samp_full)
+write.csv(samp_full,"../outputs/1-Samples.csv")
+saveRDS(samp_full,"../outputs/1-Samples.rds")
+write("This file describes information about each sample. It is saved as an RDS file for loading into R with the proper column objects (e.g. ordered factors) ",
+      "../outputs/1-Samples.metadata")
+```
+
+#### Save individual inversion files 
+
+```{r}
+breakpoints
+write.csv(breakpoints, "../outputs/1-breakpoints.csv", row.names = FALSE)
+write("This file describes the breakpoint of inversions identified by the 99% outlier PCA loadings for individual chromsome /n
+      LG: linkage group /n
+      LGstartIndex: Start index of the inversion in the full genotype matrix stored in `1-AllGSNPs.rds` /n
+      LGendIndex: end index of the inversion in the full genotype matrix stored in `1-AllGSNPs.rds` /n
+      chrom: chromosome /n
+      LGstartPos: start position of the inversion on the chromosoms /n
+      LGendPos: end start position of the inversion on the chromosoms /n
+      LGstartPos_minus1MB_index: Start index minus 1 MB of the inversion in the full genotype matrix stored in `1-AllGSNPs.rds` /n
+      LGendPos_plus1MB_index: end index plus 1MB of the inversion in the full genotype matrix stored in `1-AllGSNPs.rds` /n",
+      "../outputs/1-breakpoints.csv.metadata.md")
+
+head(G_full[,1:5]) # make sure rows and columns are labeled
+
+saveRDS(G_LG, "../outputs/1-AllLGSNPs.rds")
+dim(G_LG)
+write("This file is a genotype matrix for SNPs located in the four inversions
+      Each matrix has individuals in rows and SNPs in columns
+      Each cell has the number of copies of the alternate allele",
+      "../outputs/1-AllLGSNPs.metadata.md")
+
+
+saveRDS(G_full[,LG1start_minus1MB:LG1end_plus1MB], "../outputs/1-G_LG1.rds")
+saveRDS(G_full[,LG2start_minus1MB:LG2end_plus1MB], "../outputs/1-G_LG2.rds")
+saveRDS(G_full[,LG7start_minus1MB:LG7end_plus1MB], "../outputs/1-G_LG7.rds")
+saveRDS(G_full[,LG12start_minus1MB:LG12end_plus1MB], "../outputs/1-G_LG12.rds")
+write("These files are genotype matrices for the inversions on each linkage group
+      Each matrix has individuals in rows and SNPs in columns
+      Each cell has the number of copies of the alternate allele",
+      "../outputs/1-G_LGX.metadata.md")
+```

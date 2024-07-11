@@ -1,0 +1,1 @@
+This file contains a genotype matrix with 100000 SNPs randomly sampled from non-inversion regions, output from file KL-1 inversion code all.Rmd. The samples are in rows and the SNPs are in columns. Each cell stores the number of copies of the alternate allele.

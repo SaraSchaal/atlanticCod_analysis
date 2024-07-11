@@ -3,8 +3,8 @@ title: "Cod Inversions"
 author: "KE Lotterhos"
 date: "2024-03-18"
 output:
-  pdf_document: default
   html_document: default
+  pdf_document: default
 ---
 
 
@@ -437,7 +437,16 @@ breakpoints <- data.frame(
 )
 ```
 
-
+### Add additional categories to sample df
+```{r}
+samp_full$Ecotype2 <- factor(paste0(samp_full$Ecotype,"-",
+                                 samp_full$Region), ordered=TRUE)
+levels(samp_full$Ecotype2)
+samp_full$Ecotype2_color <- samp_full$Ecotype2 
+levels(samp_full$Ecotype2_color) <- c("lightblue","cornflowerblue","darkviolet")
+levels(samp_full$Ecotype2_color)
+str(samp_full$Ecotype2_color)
+```
 
 # PC just on inversions
 
@@ -447,6 +456,17 @@ LGind <- c(LG1start:LG1end, LG2start:LG2end,
            LG7start:LG7end, LG12start:LG12end)
 
 G_LG <- G_full[,LGind]
+
+dim(G_full)
+G_nonInv <- G_full[,-LGind]
+dim(G_nonInv)
+set.seed(34594323)
+G_nonInv_subset <- G_nonInv[,sample(1:ncol(G_nonInv), 100000,
+                                    replace=FALSE)]
+dim(G_nonInv_subset)
+saveRDS(G_nonInv_subset, file="../outputs/G_nonInv_subset.RDS")
+write("This file contains a genotype matrix with 100000 SNPs randomly sampled from non-inversion regions, output from file KL-1 inversion code all.Rmd. The samples are in rows and the SNPs are in columns. Each cell stores the number of copies of the alternate allele.",
+      "../outputs/G_nonInv_subset.metadata")
 
 head(colnames(G_LG))
 head(rownames(G_LG))
@@ -542,7 +562,7 @@ saveRDS(G_LG, "../outputs/1-AllLGSNPs.rds")
 dim(G_LG)
 write("This file is a genotype matrix for SNPs located in the four inversions
       Each matrix has individuals in rows and SNPs in columns
-      Each cell has the number of copies of the reference allele",
+      Each cell has the number of copies of the alternate allele",
       "../outputs/1-AllLGSNPs.metadata.md")
 
 
@@ -552,6 +572,7 @@ saveRDS(G_full[,LG7start_minus1MB:LG7end_plus1MB], "../outputs/1-G_LG7.rds")
 saveRDS(G_full[,LG12start_minus1MB:LG12end_plus1MB], "../outputs/1-G_LG12.rds")
 write("These files are genotype matrices for the inversions on each linkage group
       Each matrix has individuals in rows and SNPs in columns
-      Each cell has the number of copies of the reference allele",
+      Each cell has the number of copies of the alternate allele",
       "../outputs/1-G_LGX.metadata.md")
 ```
+ 

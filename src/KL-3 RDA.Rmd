@@ -78,7 +78,7 @@ dim(cor_traits)
 
 head(samp_full)
 str(samp_full)
-samp_full$order <- 1:nrow(samp_full)
+
 
 # merge the traits into the sample dataframe 
 samp_full2 <- merge(samp_full, uncor_traits, 
@@ -301,13 +301,29 @@ rda_trait_pred <- function(rdaobj, env_row, K){
 
 ```
 
+# Random loci
+```{r}
+G_rand <- readRDS(file = "../outputs/G_nonInv_subset.RDS")
+dim(G_rand)
+G_rand_subset <- G_rand[,sample(1:100000,10000)]
+dim(G_rand_subset)
+saveRDS(G_rand_subset,"../outputs/1-G_nonInv_subset_10000.RDS")
+
+LGtext
+LGtext[5] <- "nonInv_subset_10000"
+muts <- data.frame(chrom_pos=colnames(G_rand_subset))
+head(muts)
+saveRDS(muts,"../outputs/2-nonInv_subset_10000-muts.RDS")
+
+```
+
 # RDAs
 ```{r rdas}
 
 
 samp_inv_morph_full <-  NULL
 
-for (i in 1:4){
+for (i in 1:5){
   samp_inv_morph <- data.frame(label = rownames(rda_traits),
                              Inv = LGtext[i],
                              traitname = NA,
@@ -336,10 +352,14 @@ G_LGX2 <- add_code256(big_copy(G_LGX[samprows,] ,type="raw"),code=bigsnpr:::CODE
 # Use this function to perform clumping and pruning on snps in large windows. We'll use this subset of "less" linked snps for the rDA
 # To skip this step comment out these lines
 # we give the infos.chr the same ID because we do one inversion at a time
-pca_inv <- snp_autoSVD(G_LGX2,infos.chr=rep(1, length=length(muts$pos)), infos.pos = muts$pos,
-                   size= 50000000,
-                    thr.r2=0.1
+if (i <5){
+pca_inv <- snp_autoSVD(G_LGX2,
+                       infos.chr=rep(1, length=length(muts$pos)),
+                       infos.pos = muts$pos,
+                       size= 50000000,
+                       thr.r2=0.1
                    )
+
 # size is the window size around the snp. 
 # For LG1, A size of 100,000 and r2 threshold 0.2 reduces the 74,000 snps on LG1 to 17,000. A size of 50MB and threshold 0.1 reduces to 8,000.
 # I explored the effects of thinning and the pattern in the results were not super sensitive to these parameters. With fewer SNPs, the percent of variation explained by the first two RDA axis decreased. In addition, for LG2 and LG7, there was more spread around individuals in RDA space. But for LG1 and LG12, strong clustering remained in RDA space.
@@ -356,6 +376,8 @@ str(pca_inv)
 plot(pca_inv$u[,1], pca_inv$u[,2], col=pca_inv$cluster_name)
 text(pca_inv$u[,1], pca_inv$u[,2], labels=pca_inv$cluster_name)
 #### end snp thinning
+}
+if (i==5){thinned_snps <- 1:ncol(G_LGX)}
 
 
 rda_gen <- G_LGX[samprows,thinned_snps]
@@ -434,6 +456,8 @@ bp
 #Plot
 samp_full5_gen$Ecotype2 <- paste0(samp_full5_gen$Ecotype.x,"-",
                                  samp_full5_gen$Region)
+
+if (i <5){
 g3 <- ggplot() + ggtheme + 
   geom_point(data=samp_full5_gen, 
              aes(x=get(paste0(LGtext[i],"RDA1")),
@@ -454,6 +478,7 @@ g3 <- ggplot() + ggtheme +
   ggtitle(LGtext[i])
 g3
 ggsave(filename=paste0("../figures/",LGtext[i],"_RDA_3.pdf"), g3, width = 5, height=4)
+}# end if
 } # end loop
 
 head(samp_full2)
@@ -464,6 +489,8 @@ head(samp_full2)
 
 traittext <- unique(samp_inv_morph_full$traitname)
 subtraits
+str(samp_inv_morph_full)
+unique(samp_inv_morph_full$Inv)
 
 for (i in 1:length(subtraits)){
   print(traittext[i])
@@ -484,11 +511,6 @@ for (i in 1:length(subtraits)){
   str(sub$pop)
   levels(sub$pop)
   
-  rda_traits <- as.data.frame(rda_traits)
-  str(rda_traits)
-  rda_traits2<- rda_traits[order(rda_traits$cD1),]
-  rda_traits2$label <- rownames(rda_traits2)
-  head(rda_traits2)
   
   sub$Inv <- factor(sub$Inv, levels=c("LG1", "LG2", "LG7", "LG12"), ordered=TRUE)
   str(sub$Inv)
@@ -509,9 +531,16 @@ for (i in 1:length(subtraits)){
     ggtheme + scale_fill_manual(values=magma(4, begin=0, end=0.8 )) 
   g2
     
-  g2
+  
+ g3 <- ggplot(data=sub) + ggtitle(subtraits[i]) +
+   geom_histogram(aes(x=trait_pred, fill=Inv), binwidth=0.1) + ggtheme +
+   facet_grid(rows = vars(Inv))
+ g3 
+ 
+  
   ggsave(filename=paste0("../figures/RDA_",subtraits[i],"_predict.pdf"), g2, width = 15, height=20)
   ggsave(filename=paste0("../figures/RDA_",subtraits[i],"_predict_pop.pdf"), g2pop, width = 5, height=5)
+  ggsave(filename=paste0("../figures/RDA_",subtraits[i],"_predict_hist.pdf"), g3, width = 5, height=7)
   
   pdf(paste0("../figures/RDA_rawtrait_",subtraits[i],".pdf"),
              height=8, width=8)
