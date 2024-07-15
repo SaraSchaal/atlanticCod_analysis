@@ -79,7 +79,7 @@ dim(cor_traits)
 head(samp_full)
 str(samp_full)
 
-
+samp_full$order <- 1:nrow(samp_full)
 # merge the traits into the sample dataframe 
 samp_full2 <- merge(samp_full, uncor_traits, 
                     by.x = "samp_full", 
@@ -270,6 +270,45 @@ subTraitCols <- which(colnames(samp_full5_gen) %in% subtraits)
 pdf("../figures/RDA_trait_corrs.pdf", width=7, height=7)
   corrplot(cortraits2)
 dev.off()
+
+# PCA on trait cols
+library(ggfortify)
+traitcols_norm <- scale(samp_full5_gen[,subtraits])
+traitcols_pca <- prcomp(traitcols_norm)
+summary(traitcols_pca)
+str(traitcols_pca)
+
+pdf("../figures/trait-PCAs.pdf", width=7, height=5)
+autoplot(traitcols_pca, data=samp_full5_gen, colour='Ecotype2',
+         loadings=TRUE, shape='Ecotype', loadings.label=TRUE,
+         frame=TRUE, frame.type='norm') + 
+  ggtheme +
+  scale_colour_manual(values = c("lightblue","cornflowerblue","darkviolet" ))
+dev.off()
+```
+
+# individual ANOVAs on trait columns
+```{r, trait ANOVAs}
+
+  Ecotype3 <- gsub("-","",samp_full5_gen$Ecotype2)
+  pdf("../figures/trait-ANOVAs.pdf", width=9, height=8)
+    par(mar=c(1,4,0,1), mfrow=c(3,3))
+for (i in subTraitCols[c(1,2,3,5,6,7,4)]){ # this order does head and tail
+  a <- aov(samp_full5_gen[,i]~Ecotype3)
+ print(colnames(samp_full5_gen)[i])
+   print(summary(a))
+  t <- TukeyHSD(a)
+  cld <- multcompLetters4(a, t)
+  cld$Ecotype3$Letters 
+  b<- boxplot(samp_full5_gen[,i]~samp_full5_gen$Ecotype2,
+          xlab="", ylab=colnames(samp_full5_gen)[i],
+          bty='l', ylim=c(-0.5,0.5), col=c("lightblue","cornflowerblue","darkviolet" ),
+          names=rep("",3))
+  text(cld$Ecotype3$Letters[order(names(cld$Ecotype3$Letters))] , x=1:3, y=max(b$stats[5,])+0.1)
+} #end trait loop
+  plot(0,0, bty="n",col="white")
+  legend(-1,1, levels(samp_full5_gen$Ecotype2), fill=c("lightblue","cornflowerblue","darkviolet" ), cex=1.5)
+  dev.off()
 ```
 
 
@@ -305,7 +344,7 @@ rda_trait_pred <- function(rdaobj, env_row, K){
 ```{r}
 G_rand <- readRDS(file = "../outputs/G_nonInv_subset.RDS")
 dim(G_rand)
-G_rand_subset <- G_rand[,sample(1:100000,10000)]
+G_rand_subset <- G_rand[,sample(1:ncol(G_rand),10000)]
 dim(G_rand_subset)
 saveRDS(G_rand_subset,"../outputs/1-G_nonInv_subset_10000.RDS")
 
@@ -315,6 +354,36 @@ muts <- data.frame(chrom_pos=colnames(G_rand_subset))
 head(muts)
 saveRDS(muts,"../outputs/2-nonInv_subset_10000-muts.RDS")
 
+```
+
+# Permutated genome-wide null distribution for cumulative importance of traits in RDA space
+```{r}
+K=4
+for (i in 1:999){
+  print(i)
+  G_rand_subset <- G_rand[,sample(1:ncol(G_rand),10000)]
+  if(!(dim(G_rand_subset[samprows,])[1]==dim(samp_full5_gen)[1])){
+  print("Error dim don't line up")
+  break
+  }# make sure labels line up
+if(!identical(rownames(G_rand_subset[samprows,]),samp_full5_gen$label)){
+  print("Error sample names don't line up")
+  break
+  }# make sure labels line up
+
+  rda_gen <- G_LGX[samprows,]
+  
+  # check the sample dataframe issamp_full# check the sample dataframe is identical
+if (!identical(rownames(rda_traits), rownames(rda_gen))){print("Error"); break()} 
+
+rda_lgx <- rda(rda_gen~rda_traits)
+a<- screeplot(rda_lgx)
+prop_var <- round(a$y/sum(a$y),3)
+biplot <- (as.data.frame(rda_lgx$CCA$biplot[,1:K]))
+cumimpmat <- abs(t(biplot)*prop_var[1:K])
+colnames(cumimpmat) <- subtraits
+print(colSums(cumimpmat))
+  }
 ```
 
 # RDAs
@@ -388,6 +457,7 @@ dim(rda_gen)
 if (!identical(rownames(rda_traits), rownames(rda_gen))){print("Error"); break()} 
 
 rda_lgx <- rda(rda_gen~rda_traits)
+# if you run it the other way it's overfitted due to too many genotypes
 
 # eigenvalues
 a<- screeplot(rda_lgx)
