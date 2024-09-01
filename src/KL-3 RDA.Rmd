@@ -356,35 +356,7 @@ saveRDS(muts,"../outputs/2-nonInv_subset_10000-muts.RDS")
 
 ```
 
-# Permutated genome-wide null distribution for cumulative importance of traits in RDA space
-```{r}
-K=4
-for (i in 1:999){
-  print(i)
-  G_rand_subset <- G_rand[,sample(1:ncol(G_rand),10000)]
-  if(!(dim(G_rand_subset[samprows,])[1]==dim(samp_full5_gen)[1])){
-  print("Error dim don't line up")
-  break
-  }# make sure labels line up
-if(!identical(rownames(G_rand_subset[samprows,]),samp_full5_gen$label)){
-  print("Error sample names don't line up")
-  break
-  }# make sure labels line up
 
-  rda_gen <- G_LGX[samprows,]
-  
-  # check the sample dataframe issamp_full# check the sample dataframe is identical
-if (!identical(rownames(rda_traits), rownames(rda_gen))){print("Error"); break()} 
-
-rda_lgx <- rda(rda_gen~rda_traits)
-a<- screeplot(rda_lgx)
-prop_var <- round(a$y/sum(a$y),3)
-biplot <- (as.data.frame(rda_lgx$CCA$biplot[,1:K]))
-cumimpmat <- abs(t(biplot)*prop_var[1:K])
-colnames(cumimpmat) <- subtraits
-print(colSums(cumimpmat))
-  }
-```
 
 # RDAs
 ```{r rdas}
@@ -495,6 +467,36 @@ biplot <- rbind(biplot, c(prop_var[1:K], NA))
 rownames(biplot)[nrow(biplot)] <- "Prop_Var"
 biplot
 write.table(biplot, file=paste0("../outputs/RDA_biplot_", LGtext[i],".txt"))
+
+## random traits dist ####
+# this loop calculates the cumulative importance for a set of 7 randomly distributed traits
+# Will use to calculate a P-value for the cumulative importance of trait in RDA space
+reps <- 1000
+rand_CI <- matrix(NA, ncol=ncol(rda_traits), nrow=reps)
+for (j in 1:reps){
+  print("Random trait RDAs")
+  rand_traits <- matrix(rnorm(nrow(rda_traits)*ncol(rda_traits)),
+                        ncol=ncol(rda_traits))
+  rda_rand <- rda(rda_gen~rand_traits)
+  a_rand<- screeplot(rda_rand)
+  prop_var_rand <- round(a_rand$y/sum(a_rand$y),3)
+  #print(prop_var)
+  biplot_rand <- (as.data.frame(rda_rand$CCA$biplot[,1:K]))
+  cumimpmat_rand <- abs(t(biplot_rand)*prop_var_rand[1:K])
+  colnames(cumimpmat_rand) <- subtraits
+  #print(colSums(cumimpmat))
+  rand_CI[j,] <- colSums(cumimpmat_rand)
+}
+
+# calculate trait Pvalues ###
+biplot$cumImp
+rand_CI
+empPs <- NULL
+for (k in 1:7){ # loop through each trait
+  empP <- 1-rank(c(biplot$cumImp[k], as.numeric(rand_CI)))/(length(rand_CI)+1) # calc emp. P value
+  empPs[k] <- empP[1]
+}
+empPs
 
 # loop through each trait and get the predicted value from the RDA
 for (j in 1: (nrow(biplot)-1)){
